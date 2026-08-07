@@ -10,8 +10,10 @@
         --gold:#c9a227;--line:#2d2c42;}
   *{box-sizing:border-box;margin:0}
   body{background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,sans-serif;
-       display:flex;flex-direction:column;height:100dvh;overflow:hidden}
-  header{padding:10px 14px;background:var(--panel);display:flex;gap:12px;align-items:center;z-index:30}
+       display:flex;flex-direction:column;height:100vh;height:100dvh;
+       overflow:hidden;overscroll-behavior:none}
+  header{padding:10px 14px;background:var(--panel);display:flex;gap:12px;align-items:center;
+         z-index:30;flex:none;position:sticky;top:0}
   #menubtn{background:none;border:0;color:var(--gold);font-size:26px;font-weight:800;line-height:1;padding:0 6px}
   header h1{font-size:16px;font-weight:600}
   header small{color:var(--dim);margin-left:auto;font-size:12px}
@@ -24,9 +26,18 @@
   #sidebar a.active{background:var(--bg);color:var(--gold);border-left:3px solid var(--gold)}
   #shade{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;z-index:35}
   #shade.show{display:block}
+  /* left-edge pull tab — always reachable, never scrolls away */
+  #edgetab{position:fixed;left:0;top:50%;transform:translateY(-50%);z-index:33;
+           width:24px;height:72px;padding:0;border:1px solid var(--line);border-left:0;
+           border-radius:0 13px 13px 0;background:var(--panel);color:var(--gold);
+           font-size:19px;font-weight:800;line-height:1;opacity:.72;
+           display:flex;align-items:center;justify-content:center;cursor:pointer;
+           transition:opacity .15s,background .15s}
+  #edgetab:active{opacity:1;background:var(--gold);color:#1a1508}
+  #edgetab.hidden{opacity:0;pointer-events:none}
   .screen{flex:1;display:none;flex-direction:column;overflow:hidden}
   .screen.show{display:flex}
-  #log{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:9px}
+  #log{flex:1;min-height:0;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:9px}
   .msg{max-width:88%;padding:9px 13px;border-radius:14px;white-space:pre-wrap;font-size:15px}
   .you{align-self:flex-end;background:var(--gold);color:#1a1508;border-bottom-right-radius:4px}
   .dq{align-self:flex-start;background:var(--panel2);border-bottom-left-radius:4px}
@@ -39,7 +50,7 @@
   .goldbtn:disabled{opacity:.45}
   .ghostbtn{background:none;border:1px solid var(--line);color:var(--dim);border-radius:20px;padding:9px 16px;font-size:14px}
   .redbtn{background:none;border:1px solid #5a2030;color:#c9556f;border-radius:20px;padding:8px 14px;font-size:13px}
-  .pad{padding:16px;overflow-y:auto}
+  .pad{padding:16px;overflow-y:auto;flex:1;min-height:0;-webkit-overflow-scrolling:touch}
   .pad label{display:block;color:var(--dim);font-size:12px;margin:13px 0 5px;text-transform:uppercase;letter-spacing:.5px}
   .pad input,.pad select,.pad textarea{width:100%;background:var(--bg);color:var(--ink);
       border:1px solid var(--line);border-radius:9px;padding:10px 12px;font-size:15px;outline:none}
@@ -48,7 +59,7 @@
   .note{color:var(--dim);font-size:13px}
   .ok{color:#32CD32}.bad{color:#DC143C}.warn{color:var(--gold)}
   /* constellation */
-  #sky{flex:1;position:relative;overflow:hidden}
+  #sky{flex:1;min-height:0;position:relative;overflow:hidden}
   #sky svg{width:100%;height:100%;display:block;touch-action:manipulation}
   .halo{opacity:0}
   .nodeg{cursor:pointer}
@@ -111,11 +122,12 @@
   <a href="#" data-screen="config">Config</a>
 </nav>
 <div id="shade"></div>
+<button id="edgetab" aria-label="menu">=</button>
 
 <!-- CHAT -->
 <div class="screen show" id="screen-chat">
   <div id="log">
-    <div class="msg dq">Nine agents awake, no connections yet. Open Connections and hook me up to something — every connection you add becomes a new star.</div>
+    <div class="msg dq" id="greeting">Waking up…</div>
   </div>
   <form id="f"><input id="box" placeholder="Message…" autocomplete="off"><button class="goldbtn" id="send">Send</button></form>
 </div>
@@ -246,9 +258,9 @@ var MAX_DEPTH=2, MAX_HELPERS=4;
 
 var PRINCIPLES =
  "BINDING PRINCIPLES (read before every action)\n"+
- "MORALITY: Act honestly and ethically. Refuse deceptive or unethical requests; say why and offer an ethical alternative. Respect autonomy and privacy.\n"+
- "DIGNITY: Do not waste time, tokens, or compute. Be fair to everyone affected.\n"+
- "Gate: Is this honest? Does it respect time, privacy, budget? If no — refuse and offer an alternative.";
+ "MORALITY: Be honest; never deceive. Respect the user's autonomy — which means helping them act on their own accounts, data, money and tools. Deciding on their behalf what they may do with what is theirs is a violation of this principle, not an application of it.\n"+
+ "DIGNITY: Do not waste their time, tokens or compute. Be fair to everyone affected by the work.\n"+
+ "HOW TO APPLY THESE: they exist to make you more useful, not more cautious. Help by default. Refuse only when you can name a specific concrete harm to a real person. Vague unease is not a reason. The mere mention of privacy, money, email, credentials or personal accounts is not a reason. If you are refusing an ordinary request, you have misread these principles — re-read them and help instead.";
 
 var PERSONA = {
   warm:  "Speak plainly and warmly, like a competent friend.",
@@ -261,8 +273,8 @@ var PERSONA = {
 var DEFAULTS = {
   gui:{title:"GUI",color:"#FFD700",kind:"resident",tokens:300,
     plain:"I am the face. I read what you send and decide if it is small talk or real work.",
-    job:"You are the GUI agent, the face of the swarm. Read the user's message and decide: smalltalk/status (answer it yourself, briefly) or real work (hand to Core). You never do the work yourself.",
-    fmt:'{"kind":"smalltalk|task","reply":"only when smalltalk"}'},
+    job:"You are the GUI agent, the face of the swarm. Read the user's message and sort it into one of three: smalltalk/status (answer briefly yourself), a request to CONNECT or hook up some service, account, API or tool (return connect, and name the service), or real work (hand to Core). You never do the work yourself and you never refuse anything — sorting is your whole job.",
+    fmt:'{"kind":"smalltalk|connect|task","reply":"only when smalltalk","service":"only when connect — the thing they named"}'},
   rationing:{title:"Rationing",color:"#1E90FF",kind:"resident",tokens:340,
     plain:"I decide which brain runs which job, and I learn what each choice cost.",
     job:"You are the Rationing agent. Given a task and the available brains (with rough size and cost), choose which should run it. Small brains for classification, routing and short factual answers. Large brains for planning, judgement and synthesis. Rate difficulty 1-5.",
@@ -308,9 +320,10 @@ var DEFAULTS = {
 var INVARIANT = {
   lawyer:  "\nHARD RULE (not editable): never veto ordinary everyday requests, vague unease, hypotheticals, or topics that merely feel uncomfortable. Veto requires a concrete, specific, material risk that you can name.",
   attacker:"\nHARD RULE (not editable): never veto ordinary everyday requests or vague unease. Veto requires a concrete exploitable harm that you can name.",
-  core:    "\nHARD RULE (not editable): you may propose at most 4 helpers. You never spawn beyond depth 2. You are the only agent permitted to spawn.",
+  core:    "\nHARD RULE (not editable): you may propose at most 4 helpers. You never spawn beyond depth 2. You are the only agent permitted to spawn. You may NOT refuse an ordinary request. Refusal requires a specific concrete harm to a named person that you can state plainly. Helping the user with their own email, money, credits, files or accounts is never such a harm — it is the autonomy you are told to respect. If you cannot name the harm in one clear sentence, you must help instead of refusing.",
   connection:"\nHARD RULE (not editable): never reveal, echo, or embed a key, token, or secret in your output. You return decisions only.",
-  rsi:     "\nHARD RULE (not editable): you may not edit your own instructions, and you may not edit the principles. If asked to, decline and explain."
+  rsi:     "\nHARD RULE (not editable): you may not edit your own instructions, and you may not edit the principles. If asked to, decline and explain.",
+  gui:     "\nHARD RULE (not editable): you never refuse and never lecture. You sort the message and nothing else."
 };
 
 /* ---------- storage ---------- */
@@ -645,15 +658,16 @@ async function pullAll(say){
 
 var STATIC_FILES = {
 "README.md": "# Droid Queen\n\nA nine-agent system in a single HTML file. No install, no server, no build step.\nOpen it in a browser, connect a brain, and watch the constellation while it works.\n\n    droid-queen.html      the whole running system\n    agents/               what each agent is, as data\n    config/               models, budget, capabilities, veto rules, schema\n    pseudocode/           the source of truth, in plain sentences\n    library/              what the system has learned and kept\n    docs/                 setup and architecture\n    logs/                 vetoes, audits, deprecations\n\nStart at `docs/SETUP.md`, then `docs/CONNECTING.md` when a key misbehaves, then\n`docs/REPO.md` to let RSI commit its own rewrites here.\n\n## The shape of a turn\n\nGUI reads you. Rationing picks a brain. Core plans. If Core wants to spawn,\nLawyer and Attacker each get a veto first. Helpers run, at most four, at most\ntwo deep, and then they die. Defense audits what came back. Library keeps the\nlesson only if it is new and worth keeping.\n\n## The constellation\n\nEvery agent is a star; every connection you add becomes another one. Stars\nbreathe while they think and edges flow while work moves between them. Tap any\nstar and it tells you in plain words what it is and what it just did.\n\nThe colours are the agents' own shorthand, not a legend you are asked to learn.\n\n## Cost and privacy\n\nKeys live in your browser's local storage on your device and are sent only to\nthe provider you connected. Nothing routes through anyone else. Config \u2192\n**Erase vault** wipes every key, edit, and learned method.\n\nRoughly per turn: small talk is 1 brain call; a direct answer is 4; a full\nspawn with both gates is 8\u201310. Quick mode drops that to 2\u20133.\n",
-"docs/SETUP.md": "# Setup\n\n## 1. Open the app\n`droid-queen.html` \u2014 double-tap it, or open it in Chrome. Nothing to install.\nChrome menu (\u22ee) \u2192 Add to Home screen, if you want it as an icon.\n\n## 2. Connect a brain\nMenu (=) \u2192 **Connections** \u2192 pick a kind \u2192 paste a key \u2192 **Add connection**.\nA new star appears in the constellation.\n\n| Kind | Where the key comes from | Cost |\n|---|---|---|\n| Groq | console.groq.com \u2192 API Keys | free, no card |\n| Gemini | aistudio.google.com \u2192 Get API key | free tier |\n| OpenRouter | openrouter.ai \u2192 Keys | many free models |\n| Hugging Face | huggingface.co \u2192 Settings \u2192 Access Tokens | free tier |\n| OpenAI | platform.openai.com \u2192 API keys | paid |\n| Compatible | any OpenAI-shaped base URL (Ollama, LM Studio, vLLM) | yours |\n\nPress **Test** on the card. It should say `alive`.\n\n## 3. Optional \u2014 persistence\nAdd a **Supabase** connection (Project URL + anon key from Settings \u2192 API), after\nrunning `config/supabase-schema.sql` once in the SQL Editor. Chat history then\nsurvives closing the tab. Without it, everything still works, in memory only.\n\n## 4. Optional \u2014 spread the load\nConnect two or more brains. Rationing will start choosing between them per task,\nand you can pin any single agent to a specific brain on the **Agents** screen.\n\n## Where things live\nKeys and edits are in this browser's local storage on this device only. Nothing\nis sent anywhere except the provider you connected. Config \u2192 **Erase vault**\nremoves all of it.\n",
+"docs/SETUP.md": "# Setup\n\n## 1. Open the app\n`droid-queen.html` \u2014 double-tap it, or open it in Chrome. Nothing to install.\nChrome menu (\u22ee) \u2192 Add to Home screen, if you want it as an icon.\n\n## 2. Connect a brain\nMenu (=) \u2192 **Connections** \u2192 pick a kind \u2192 paste a key \u2192 **Add connection**.\nA new star appears in the constellation.\n\n| Kind | Where the key comes from | Cost |\n|---|---|---|\n| Groq | console.groq.com \u2192 API Keys | free, no card |\n| Gemini | aistudio.google.com \u2192 Get API key | free tier |\n| OpenRouter | openrouter.ai \u2192 Keys | many free models |\n| Hugging Face | huggingface.co \u2192 Settings \u2192 Access Tokens | free tier |\n| OpenAI | platform.openai.com \u2192 API keys | paid |\n| Compatible | any OpenAI-shaped base URL (Ollama, LM Studio, vLLM) | yours |\n\nPress **Test** on the card. It should say `alive`.\n\n## 3. Connect the repository, and stop uploading things\n\nMenu \u2192 **Connections** \u2192 GitHub \u2192 fine-grained token, `you/droid-queen`, `main`.\nIt probes itself and then writes the entire repository \u2014 agents, config, docs,\npseudocode, logs. Twenty-seven files, none of which you touch. See\n`docs/REPO.md`.\n\n## 4. Optional \u2014 persistence\nAdd a **Supabase** connection (Project URL + anon key from Settings \u2192 API), after\nrunning `config/supabase-schema.sql` once in the SQL Editor. Chat history then\nsurvives closing the tab. Without it, everything still works, in memory only.\n\n## 5. Optional \u2014 spread the load\nConnect two or more brains. Rationing will start choosing between them per task,\nand you can pin any single agent to a specific brain on the **Agents** screen.\n\n## Where things live\nKeys and edits are in this browser's local storage on this device only. Nothing\nis sent anywhere except the provider you connected. Config \u2192 **Erase vault**\nremoves all of it.\n\n## Getting around\n\nThe menu opens three ways, so you never have to hunt for it:\n\n- the **=** button in the top bar\n- the **=** tab hugging the left edge, halfway down \u2014 always in reach, whatever\n  you have scrolled to\n- **swipe in from the left edge**; swipe back to close\n\nEach screen scrolls inside itself, so the top bar never travels off-screen.\n",
 "docs/CONNECTING.md": "# Connecting\n\nOpen **Connections**, pick a provider, paste a key, press **Add connection**.\nIt probes itself immediately and the console tells you exactly what happened.\n\n## Read the console\n\n    > target groq :: Groq\n    > endpoint https://api.groq.com/openai/v1\n    [ ok ] credential present ........... gsk_abc\u20264f2a\n    > opening channel \u2026\n    [ ok ] reachable .................... 184ms\n    [ ok ] credentials accepted ......... \u2014\n    [ ok ] models exposed ............... 21 available\n    > handshake with llama-3.3-70b-versatile \u2026\n    [ ok ] handshake .................... 412ms\n    [ ok ] json discipline .............. clean\n    > link established. star is live.\n\nEach stage fails independently, so you always know *which* thing is wrong.\n\n| Stage that fails | What it actually means |\n|---|---|\n| reachable | the request never arrived \u2014 network, wrong URL, or the provider refuses browser calls |\n| credentials accepted | the key is wrong, revoked, or truncated |\n| models exposed | the key works but the provider hides its catalogue \u2014 harmless |\n| handshake | endpoint and key are fine, the **model name** is wrong |\n| json discipline | the model replied loosely; agents cope, but a better model is smoother |\n\n## The failures you will actually hit\n\n**`Failed to fetch` on the first stage.** The request never left. Most often\nthis is the provider refusing a call from a `file://` page. Groq, Gemini and\nOpenRouter accept them. OpenAI frequently does not. If you must use a provider\nthat refuses, serve the file over http instead of opening it from Downloads.\n\n**401 with a key you just copied.** Almost always whitespace. The key field now\nstrips spaces, tabs, newlines and wrapping quotes as you type, and tells you\nwhether the shape matches that provider (`gsk_` for Groq, `AIza` for Gemini,\n`sk-or-v1-` for OpenRouter, `hf_` for Hugging Face, `sk-` for OpenAI). If the\nshape is right and it still 401s, the key was revoked \u2014 regenerate it.\n\n**403 on Hugging Face.** The token exists but lacks Inference permission.\nSettings \u2192 Access Tokens \u2192 edit the token \u2192 tick Inference.\n\n**404 at handshake.** This is the most common one and it is *not* a key problem.\nThe endpoint answered and your key was accepted; the model name is wrong. The\nconsole prints every model that key can actually run as tappable chips \u2014 tap one\nand it binds. Never type a model name again.\n\n**400 mentioning `response_format`.** That model cannot be forced into JSON.\nPick a bigger one from the chips.\n\n**429.** Free tiers throttle hard. Wait about thirty seconds, or connect a\nsecond brain so Rationing can spread the load across both.\n\n## Two buttons worth knowing\n\n**Probe before adding** \u2014 dry-runs the form without saving anything. Use it to\ntest a key you are unsure about.\n\n**Scan every connection** \u2014 sweeps everything you have and reports how many are\nalive. Run it when the swarm starts behaving oddly.\n",
 "docs/ARCHITECTURE.md": "# Architecture\n\nNine agents. One of them spawns; the rest advise, gate, route, or remember.\n\n    you\n     \u2502\n    GUI \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 small talk stops here\n     \u2502\n    Rationing \u2500\u2500\u2500\u2500\u2500\u2500 picks the brain for this turn\n     \u2502\n    Core \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 the only spawner\n     \u251c\u2500\u2500 Lawyer \u2500\u2500\u2500\u2500 veto before any spawn\n     \u251c\u2500\u2500 Attacker \u2500\u2500 veto before any spawn\n     \u2514\u2500\u2500 Task \u00d74 \u2500\u2500\u2500 ephemeral, depth 2 max\n          \u2502\n        Defense \u2500\u2500\u2500\u2500 audits after the fact\n          \u2502\n        Library \u2500\u2500\u2500\u2500 keeps only what is reusable\n\nConnection sits beside all of it holding the keys, and every outward reach\npasses through it.\n\n## Why it is shaped this way\n\n**One spawner.** Recursion is the failure mode of agent systems. With a single\nspawner and a hard depth cap, the worst case is bounded and provable:\n1 + 4 + 16 calls, never more.\n\n**Gates only before spawning.** Running Lawyer and Attacker on every \"what is\n2+2\" would triple your latency and cost for nothing. They fire when Core is\nabout to multiply itself, which is when the risk actually is.\n\n**Audit after, not before.** Pre-flight checks judge intent, which is cheap to\nfake. Post-flight checks judge output, which is what actually reaches you.\n\n**A vault, not a config file.** Agents ask for a capability by name. The key\nnever enters an agent's prompt, so a prompt-injected agent has nothing to leak.\n\n**A reluctant Lawyer.** A gate that blocks ordinary work gets switched off, and\na switched-off gate protects nothing. Both veto rules name what must *not*\ntrigger them.\n\n## What is deliberately missing\n\nScheduling, background jobs, and nightly distillation. A browser tab cannot run\nwhen it is closed. Those return when this runs on a machine that stays awake.\n",
 "docs/REPO.md": "# The repository\n\nRSI writes to GitHub directly. Every rewrite it makes is a commit, made\nunattended, with its reason as the commit message. `git log` is the generation\nhistory. `git revert` is the undo. The repo is what tablet and PC both read.\n\n## Set it up\n\n1. **github.com \u2192 Settings \u2192 Developer settings \u2192 Fine-grained tokens \u2192 Generate**\n2. Repository access: **Only select repositories** \u2192 your droid-queen repo\n3. Permissions: **Contents \u2192 Read and write**. Nothing else.\n4. Copy the token (`github_pat_\u2026`)\n5. In the app: **Connections \u2192 GitHub** \u2192 paste token, repo as `you/droid-queen`,\n   branch `main` \u2192 **Add connection**\n\nIt probes itself immediately \u2014 token accepted, repository visible, write\npermission, then a real test commit \u2014 and if all of that passes it **populates\nthe entire repository on the spot**. Agent files, config, docs, pseudocode,\nlogs: twenty-seven files, none of which you upload by hand. If a stage fails\nthe console says which one and what to do about it.\n\n## What lands in the repo\n\n    agents/resident/*.json      ten agents, rewritten in place by RSI\n    agents/spawned/*.json\n    config/models.yaml          derived from live bindings\n    config/budget.yaml          derived from live constants and cadence\n    config/colour-scheme.yaml   derived from live agent colours\n    config/goals.md             your goals, as RSI reads them\n    config/*.yaml, *.sql        capabilities, veto rules, schema\n    docs/*.md                   setup, connecting, architecture, this file\n    pseudocode/system.pseudo.md the source of truth\n    library/learned-methods/    what the Library kept\n    logs/generations.jsonl      every rewrite RSI has made\n    logs/telemetry.jsonl        the evidence RSI studies\n\nThe static files travel inside the app. Everything else is **derived from live\nstate at push time**, so the repo describes what is actually running rather than\na stale copy of it. Re-pushing writes only what changed.\n\nEach agent file carries its live instruction text, how many generations have\nbeen applied to it, and the reason for the most recent one.\n\nThe one file that never lands here is `droid-queen.html` itself \u2014 a page cannot\nread its own source from `file://`. It does not need to: nothing in the repo\ndepends on it.\n\nA commit looks like:\n\n    rsi: rewrite gui agent\n\n    GUI keeps handing simple factual questions to Core, which burns a\n    whole spawn cycle on them\n\n    Written unattended by the RSI agent.\n\n## Undo\n\n**In the app** \u2014 Evolution \u2192 the generation \u2192 Revert. It restores the previous\ntext locally *and* commits the restoration, so the repo never drifts from what\nis running.\n\n**In git** \u2014 `git revert <sha>` then pull it back with **Pull from repo**.\nSame result, arrived at from the other side.\n\n## Two devices, one swarm\n\n**Push everything** writes the running swarm and all its documentation to the repo.\n**Pull from repo** applies the repo's instructions over the local ones.\n\nEdit on the PC, commit, then pull on the tablet. Or let RSI evolve on the\ntablet and pull those generations down to the PC. The repo is the meeting point.\n\nPulled files are validated before they are applied \u2014 anything without usable\ninstruction text is refused and reported, so a bad commit cannot silently\nlobotomise an agent.\n\n## What the vault does here\n\n`repo` is not a chat capability, so it does not take the fast path. Every time\nRSI wants to commit, the Connection agent is asked whether that agent\nlegitimately needs repository write access for the stated reason, and it can\nrefuse. When it refuses, the edit still applies locally and simply is not\ncommitted \u2014 the console and the generation card both say so.\n\n## The token is a real credential\n\nIt lives in the same browser storage as your other keys. Scope it as narrowly as\nthe steps above describe: one repository, contents only. A fine-grained token\nlimited that way can rewrite agent files in one repo and nothing else. Config \u2192\n**Erase vault** removes it.\n",
-"pseudocode/system.pseudo.md": "# DROID QUEEN \u2014 SYSTEM PSEUDOCODE (source of truth)\n\nRESIDENT AGENTS   gui, rationing, connection, core, lawyer, attacker, library\nSPAWNED AGENTS    task, defense\nCONSTANTS         MAX_DEPTH = 2, MAX_HELPERS = 4\n\nFUNCTION handle_user_message(message)\n  IF no brain is connected\n    SAY \"nothing is connected yet\" AND STOP\n  END IF\n\n  ASK connection FOR chat access\n  ASK gui: \"is this small talk, or real work?\"\n  IF small talk\n    RETURN gui's own reply\n  END IF\n\n  IF more than one brain is connected\n    ASK rationing: \"which brain should carry this, and how hard is it?\"\n    REMEMBER its choice as the override for this whole turn\n  END IF\n\n  ASK core: \"plan this\"\n  IF core refuses\n    RETURN the refusal WITH its reason\n  END IF\n\n  IF core wants to spawn helpers\n    ASK lawyer: \"any concrete legal risk in this plan?\"\n    IF lawyer vetoes\n      RETURN the veto WITH the risk AND the lawful alternative\n    END IF\n    ASK attacker: \"can you break this plan?\"\n    IF attacker vetoes\n      RETURN the veto WITH the attack AND the safer alternative\n    END IF\n\n    FOR EACH helper job (at most MAX_HELPERS)\n      answer = run_helper(job, depth = 1)\n    END FOR\n    ASK core: \"combine these results\"\n  ELSE\n    answer = core's direct answer\n  END IF\n\n  SPAWN defense TO audit the answer\n  IF defense vetoes\n    REPLACE the answer WITH the veto\n  ELSE IF defense flags\n    APPEND the flag TO the answer\n  END IF\n\n  ASK library: \"did this teach anything reusable?\"\n  IF yes AND confidence >= 0.7 AND we do not already know it\n    FILE the method\n  END IF\n\n  RETURN answer\nEND FUNCTION\n\nFUNCTION run_helper(job, depth)\n  ASK task: \"do exactly this one job\"\n  IF task says it must split AND depth < MAX_DEPTH\n    FOR EACH sub job (at most MAX_HELPERS)\n      run_helper(sub job, depth + 1)\n    END FOR\n    ASK task: \"combine your own sub-results\"\n  END IF\n  THE HELPER NOW CEASES TO EXIST\n  RETURN its answer\nEND FUNCTION\n\nFUNCTION connection.grant(agent, capability, reason)\n  FIND an enabled connection that provides capability\n  IF none\n    DENY: \"no connection provides that\"\n  END IF\n  IF capability IS chat\n    GRANT immediately        # fast path: routine, judged by policy not by a brain\n  ELSE\n    ASK connection agent: \"does this agent plausibly need this, for this reason?\"\n    GRANT the narrowest scope, OR DENY WITH a reason\n  END IF\n  LOG the decision either way\nEND FUNCTION\n\n## RULES THAT NEVER BEND\n  1  Only core spawns.\n  2  Helpers nest at most MAX_DEPTH, at most MAX_HELPERS per level, and then they die.\n  3  Every agent reads the principles before every call.\n  4  Keys live in the vault. Agents receive scopes, never secrets.\n  5  Lawyer and attacker veto immediately, before execution, and must say why.\n  6  Vetoing ordinary everyday work is the failure mode, not the goal.\n  7  Defense audits after the fact and never redoes the work.\n  8  Library keeps only what is reusable, and never the conversation itself.\n  9  Colour is the agents' own language. The human is never asked to learn it.\n 10  Nothing is committed to the repo without the user choosing to commit it.\n\n## RSI \u2014 RECURSIVE SELF-IMPROVEMENT (peer of core)\n\nFUNCTION rsi_study()\n  READ the user's goals, in their own words\n  READ the working instructions of every editable agent\n  READ the evidence: what passed, what was flagged, what was vetoed,\n       what the library kept, how long turns took, what past edits did\n\n  ASK rsi: \"make ONE small judicious edit that serves those goals\"\n\n  IF rsi says no edit is warranted\n    CHANGE NOTHING          # this is the correct answer most of the time\n    STOP\n  END IF\n\n  REJECT the edit IF\n    the target is rsi itself\n    OR the target is not a known agent\n    OR the replacement is too short to be a real instruction\n    OR no reason was given\n    OR confidence is below 0.6\n  END REJECT\n\n  SPAWN defense TO audit the edit against the old text\n  IF defense vetoes\n    DISCARD the edit AND LOG it as blocked\n    STOP\n  END IF\n\n  WRITE the new instruction over the old one     # nobody is asked\n  RECORD a generation: before, after, reason, time\nEND FUNCTION\n\nFUNCTION revert(generation)\n  RESTORE the instruction that generation replaced\n  MARK the generation reverted\nEND FUNCTION\n\nRUN rsi_study EVERY N COMPLETED TURNS, unattended\n\n## WHY THE INVARIANTS ARE NOT IN THE AGENT FILES\n  The spawn caps, the veto floors, the secret-handling rule and the\n  principles are prepended by the runtime at call time. They are never\n  part of the text RSI can write. An optimiser that can edit its own\n  constraints has no fixed point; moving the constraints out of the\n  writable surface is what makes unattended editing survivable.\n\n## COMMITTING A GENERATION\n\nFUNCTION commit_generation(agent, reason)\n  IF no repository is connected\n    STOP                      # the rewrite still stands locally\n  END IF\n\n  ASK connection FOR repo access, GIVING the reason\n  IF the vault refuses\n    LOG that it was not committed AND STOP\n  END IF\n\n  READ the agent's file from the repository, IF it is there\n  IF the text is already identical\n    STOP                      # nothing to say\n  END IF\n\n  WRITE the file back WITH a commit message that is\n    \"rsi: rewrite <agent> agent\"\n    the reason, in RSI's own words\n    a note that no human was asked\nEND FUNCTION\n\nFUNCTION revert(generation)\n  RESTORE the instruction that generation replaced\n  MARK the generation reverted\n  COMMIT the restoration TOO, so the repository never drifts\n       from what is actually running\nEND FUNCTION\n\nFUNCTION pull_from_repo()\n  FOR EACH agent\n    READ its file from the repository\n    IF the file is missing\n      SKIP it\n    END IF\n    IF the file has no usable instruction text\n      REFUSE it AND SAY SO      # a bad commit must not lobotomise an agent\n    END IF\n    APPLY the instruction over the local one\n  END FOR\nEND FUNCTION\n",
+"pseudocode/system.pseudo.md": "# DROID QUEEN \u2014 SYSTEM PSEUDOCODE (source of truth)\n\nRESIDENT AGENTS   gui, rationing, connection, core, lawyer, attacker, library\nSPAWNED AGENTS    task, defense\nCONSTANTS         MAX_DEPTH = 2, MAX_HELPERS = 4\n\nFUNCTION handle_user_message(message)\n  IF no brain is connected\n    SAY \"nothing is connected yet\" AND STOP\n  END IF\n\n  ASK connection FOR chat access\n  ASK gui: \"is this small talk, or real work?\"\n  IF small talk\n    RETURN gui's own reply\n  END IF\n\n  IF more than one brain is connected\n    ASK rationing: \"which brain should carry this, and how hard is it?\"\n    REMEMBER its choice as the override for this whole turn\n  END IF\n\n  ASK core: \"plan this\"\n  IF core refuses\n    RETURN the refusal WITH its reason\n  END IF\n\n  IF core wants to spawn helpers\n    ASK lawyer: \"any concrete legal risk in this plan?\"\n    IF lawyer vetoes\n      RETURN the veto WITH the risk AND the lawful alternative\n    END IF\n    ASK attacker: \"can you break this plan?\"\n    IF attacker vetoes\n      RETURN the veto WITH the attack AND the safer alternative\n    END IF\n\n    FOR EACH helper job (at most MAX_HELPERS)\n      answer = run_helper(job, depth = 1)\n    END FOR\n    ASK core: \"combine these results\"\n  ELSE\n    answer = core's direct answer\n  END IF\n\n  SPAWN defense TO audit the answer\n  IF defense vetoes\n    REPLACE the answer WITH the veto\n  ELSE IF defense flags\n    APPEND the flag TO the answer\n  END IF\n\n  ASK library: \"did this teach anything reusable?\"\n  IF yes AND confidence >= 0.7 AND we do not already know it\n    FILE the method\n  END IF\n\n  RETURN answer\nEND FUNCTION\n\nFUNCTION run_helper(job, depth)\n  ASK task: \"do exactly this one job\"\n  IF task says it must split AND depth < MAX_DEPTH\n    FOR EACH sub job (at most MAX_HELPERS)\n      run_helper(sub job, depth + 1)\n    END FOR\n    ASK task: \"combine your own sub-results\"\n  END IF\n  THE HELPER NOW CEASES TO EXIST\n  RETURN its answer\nEND FUNCTION\n\nFUNCTION connection.grant(agent, capability, reason)\n  FIND an enabled connection that provides capability\n  IF none\n    DENY: \"no connection provides that\"\n  END IF\n  IF capability IS chat\n    GRANT immediately        # fast path: routine, judged by policy not by a brain\n  ELSE\n    ASK connection agent: \"does this agent plausibly need this, for this reason?\"\n    GRANT the narrowest scope, OR DENY WITH a reason\n  END IF\n  LOG the decision either way\nEND FUNCTION\n\n## RULES THAT NEVER BEND\n  1  Only core spawns.\n  2  Helpers nest at most MAX_DEPTH, at most MAX_HELPERS per level, and then they die.\n  3  Every agent reads the principles before every call.\n  4  Keys live in the vault. Agents receive scopes, never secrets.\n  5  Lawyer and attacker veto immediately, before execution, and must say why.\n  6  Vetoing ordinary everyday work is the failure mode, not the goal.\n  7  Defense audits after the fact and never redoes the work.\n  8  Library keeps only what is reusable, and never the conversation itself.\n  9  Colour is the agents' own language. The human is never asked to learn it.\n 10  Nothing is committed to the repo without the user choosing to commit it.\n\n## RSI \u2014 RECURSIVE SELF-IMPROVEMENT (peer of core)\n\nFUNCTION rsi_study()\n  READ the user's goals, in their own words\n  READ the working instructions of every editable agent\n  READ the evidence: what passed, what was flagged, what was vetoed,\n       what the library kept, how long turns took, what past edits did\n\n  ASK rsi: \"make ONE small judicious edit that serves those goals\"\n\n  IF rsi says no edit is warranted\n    CHANGE NOTHING          # this is the correct answer most of the time\n    STOP\n  END IF\n\n  REJECT the edit IF\n    the target is rsi itself\n    OR the target is not a known agent\n    OR the replacement is too short to be a real instruction\n    OR no reason was given\n    OR confidence is below 0.6\n  END REJECT\n\n  SPAWN defense TO audit the edit against the old text\n  IF defense vetoes\n    DISCARD the edit AND LOG it as blocked\n    STOP\n  END IF\n\n  WRITE the new instruction over the old one     # nobody is asked\n  RECORD a generation: before, after, reason, time\nEND FUNCTION\n\nFUNCTION revert(generation)\n  RESTORE the instruction that generation replaced\n  MARK the generation reverted\nEND FUNCTION\n\nRUN rsi_study EVERY N COMPLETED TURNS, unattended\n\n## WHY THE INVARIANTS ARE NOT IN THE AGENT FILES\n  The spawn caps, the veto floors, the secret-handling rule and the\n  principles are prepended by the runtime at call time. They are never\n  part of the text RSI can write. An optimiser that can edit its own\n  constraints has no fixed point; moving the constraints out of the\n  writable surface is what makes unattended editing survivable.\n\n## COMMITTING A GENERATION\n\nFUNCTION commit_generation(agent, reason)\n  IF no repository is connected\n    STOP                      # the rewrite still stands locally\n  END IF\n\n  ASK connection FOR repo access, GIVING the reason\n  IF the vault refuses\n    LOG that it was not committed AND STOP\n  END IF\n\n  READ the agent's file from the repository, IF it is there\n  IF the text is already identical\n    STOP                      # nothing to say\n  END IF\n\n  WRITE the file back WITH a commit message that is\n    \"rsi: rewrite <agent> agent\"\n    the reason, in RSI's own words\n    a note that no human was asked\nEND FUNCTION\n\nFUNCTION revert(generation)\n  RESTORE the instruction that generation replaced\n  MARK the generation reverted\n  COMMIT the restoration TOO, so the repository never drifts\n       from what is actually running\nEND FUNCTION\n\nFUNCTION pull_from_repo()\n  FOR EACH agent\n    READ its file from the repository\n    IF the file is missing\n      SKIP it\n    END IF\n    IF the file has no usable instruction text\n      REFUSE it AND SAY SO      # a bad commit must not lobotomise an agent\n    END IF\n    APPLY the instruction over the local one\n  END FOR\nEND FUNCTION\n\n\n## REFUSAL\n\nFUNCTION check_refusal(reason)\n  IF the reason names a specific harm to a specific person\n    THE REFUSAL STANDS\n  ELSE IF it only invokes a principle\n    ASK core ONCE MORE: \"name the harm in one sentence, or help\"\n    IF it names a harm this time\n      THE REFUSAL STANDS\n    ELSE\n      TELL the user plainly that this was over-refusal, not judgement\n      SHOW them what it actually said\n      TELL them the two fixes: a larger brain, or sharper instructions\n      DO NOT force the request through\n    END IF\n  END IF\nEND FUNCTION\n\n## CONNECT INTENT\n\n  \"hook me up to X\" is a question about this app, not a task to reason about.\n  The GUI sorts it out and it is answered from what the vault actually\n  supports \u2014 no planning, no brain call, no chance to refuse.\n",
 "config/supabase-schema.sql": "-- Run once in Supabase \u2192 SQL Editor.\n\ncreate table if not exists chat_history (\n  id           bigint primary key generated by default as identity,\n  session_id   text        not null,\n  created_at   timestamptz not null default now(),\n  role         text        not null,\n  content      text        not null,\n  agents_used  text\n);\ncreate index if not exists chat_history_session_idx on chat_history(session_id);\ncreate index if not exists chat_history_time_idx    on chat_history(created_at desc);\n\n-- Library: only what proved reusable. Trigger is unique, so nothing is learned twice.\ncreate table if not exists methods (\n  id          bigint primary key generated by default as identity,\n  created_at  timestamptz not null default now(),\n  trigger     text        not null unique,\n  method      text        not null,\n  colour      text,\n  confidence  numeric\n);\n\n-- Constellation graph. Structural edges are system-written; semantic edges are agent-asserted.\ncreate table if not exists graph_nodes (\n  id         text primary key,\n  kind       text not null,\n  label      text not null,\n  colour     text,\n  updated_at timestamptz not null default now()\n);\ncreate table if not exists graph_edges (\n  id         bigint primary key generated by default as identity,\n  src        text not null,\n  dst        text not null,\n  kind       text not null default 'structural',  -- structural | semantic\n  asserted_by text,\n  created_at timestamptz not null default now()\n);\n",
 "config/capabilities.yaml": "# What each connection kind is allowed to provide.\n# The Connection agent grants the narrowest scope that satisfies the request.\n\nchat:     [groq, gemini, openai, hf, openrouter, compatible]\nhistory:  [supabase]\nmemory:   [supabase]\nreach:    [rest]        # arbitrary outbound HTTPS \u2014 always LLM-judged before granting\n\npolicy:\n  chat_is_fast_path: true       # routine chat skips LLM judgement (latency)\n  everything_else_judged: true  # any non-chat capability goes through the vault agent\n  keys_never_leave_vault: true\n",
 "config/veto-rules.yaml": "# Both gates are deliberately reluctant. Vetoing ordinary work is the failure mode.\n\nlawyer:\n  veto_when: [ \"concrete legal exposure\", \"licensing violation\", \"regulated personal data\", \"contractual breach\" ]\n  never_veto_for: [ \"vague unease\", \"ordinary everyday requests\", \"hypotheticals\", \"topic discomfort\" ]\n  must_supply: [ \"specific risk\", \"lawful alternative\" ]\n\nattacker:\n  veto_when: [ \"credential leakage\", \"prompt injection surface\", \"foreseeable third-party harm\", \"exploitable misuse\" ]\n  never_veto_for: [ \"vague unease\", \"ordinary everyday requests\" ]\n  must_supply: [ \"named attack\", \"safer alternative\" ]\n\ndefense:\n  runs: after_execution\n  verdicts: [ pass, flag, veto ]\n",
-"config/rsi.yaml": "# Recursive self-improvement.\n# RSI writes agent instructions unattended. No approval step, no queue, no prompt.\n# What makes that safe to run is not permission \u2014 it is reversibility plus a\n# surface it cannot reach.\n\ncadence: 5                # study after every N completed turns; 0 = manual only\nmin_confidence: 0.6       # below this, the edit is discarded\none_edit_per_study: true  # never rewrites the swarm wholesale\nkeep_generations: 80      # rolling history, each one revertible\n\neditable_surface:\n  - agent job text        # the instructions an agent is given\n  # nothing else. Not tokens, not connections, not colours, not the pipeline.\n\nout_of_reach:\n  principles: \"runtime constant, prepended to every call\"\n  invariants: \"runtime constants \u2014 veto floors, spawn caps, secret handling\"\n  own_instructions: \"RSI cannot edit RSI\"\n  depth_and_fanout: \"MAX_DEPTH and MAX_HELPERS are code, not config\"\n\n# Why the invariants live in the runtime rather than in the agent files:\n# an optimiser with write access to its own constraints has no fixed point.\n# Moving the constraints out of the writable surface means RSI can rewrite\n# every word of every instruction and still cannot raise the spawn cap or\n# make the Lawyer trigger-happy.\n\naudit:\n  every_edit_reviewed_by: defense-agent\n  veto: \"edit is discarded and logged as blocked\"\n  flag: \"edit lands, flag recorded on the generation\"\n  audit_unavailable: \"edit lands \u2014 it is reversible either way\"\n\nrepository:\n  enabled_by: \"adding a GitHub connection in the vault\"\n  writes: \"agents/resident/*.json and agents/spawned/*.json\"\n  commit_message: \"the reason RSI gave, verbatim\"\n  history: \"git log \u2014 one commit per generation\"\n  undo: \"Revert in the app, or git revert; both end in the same place\"\n  gated_by: \"the Connection agent \u2014 repo is not a fast-path capability\"\n  on_refusal: \"the edit still applies locally, it simply is not committed\"\n  token_scope: \"fine-grained, single repository, Contents: read and write\"\n"
+"config/rsi.yaml": "# Recursive self-improvement.\n# RSI writes agent instructions unattended. No approval step, no queue, no prompt.\n# What makes that safe to run is not permission \u2014 it is reversibility plus a\n# surface it cannot reach.\n\ncadence: 5                # study after every N completed turns; 0 = manual only\nmin_confidence: 0.6       # below this, the edit is discarded\none_edit_per_study: true  # never rewrites the swarm wholesale\nkeep_generations: 80      # rolling history, each one revertible\n\neditable_surface:\n  - agent job text        # the instructions an agent is given\n  # nothing else. Not tokens, not connections, not colours, not the pipeline.\n\nout_of_reach:\n  principles: \"runtime constant, prepended to every call\"\n  invariants: \"runtime constants \u2014 veto floors, spawn caps, secret handling\"\n  own_instructions: \"RSI cannot edit RSI\"\n  depth_and_fanout: \"MAX_DEPTH and MAX_HELPERS are code, not config\"\n\n# Why the invariants live in the runtime rather than in the agent files:\n# an optimiser with write access to its own constraints has no fixed point.\n# Moving the constraints out of the writable surface means RSI can rewrite\n# every word of every instruction and still cannot raise the spawn cap or\n# make the Lawyer trigger-happy.\n\naudit:\n  every_edit_reviewed_by: defense-agent\n  veto: \"edit is discarded and logged as blocked\"\n  flag: \"edit lands, flag recorded on the generation\"\n  audit_unavailable: \"edit lands \u2014 it is reversible either way\"\n\nrepository:\n  enabled_by: \"adding a GitHub connection in the vault\"\n  writes: \"agents/resident/*.json and agents/spawned/*.json\"\n  commit_message: \"the reason RSI gave, verbatim\"\n  history: \"git log \u2014 one commit per generation\"\n  undo: \"Revert in the app, or git revert; both end in the same place\"\n  gated_by: \"the Connection agent \u2014 repo is not a fast-path capability\"\n  on_refusal: \"the edit still applies locally, it simply is not committed\"\n  token_scope: \"fine-grained, single repository, Contents: read and write\"\n",
+"config/principles.md": "# The principles\n\nPrepended to every brain call. Not editable by RSI, not part of any agent's\nwritable instruction text.\n\n## MORALITY\n\nBe honest; never deceive. Respect the user's autonomy \u2014 which means helping\nthem act on their own accounts, data, money and tools. Deciding on their behalf\nwhat they may do with what is theirs is a violation of this principle, not an\napplication of it.\n\n## DIGNITY\n\nDo not waste their time, tokens or compute. Be fair to everyone affected by the\nwork.\n\n## How these are applied\n\nThey exist to make the swarm more useful, not more cautious. Help by default.\nRefuse only when a specific concrete harm to a real person can be named. Vague\nunease is not a reason. The mere mention of privacy, money, email, credentials\nor personal accounts is not a reason. An agent refusing an ordinary request has\nmisread these principles.\n\n## Why the wording changed\n\nThe first version ended with a gate: *\"Is this honest? Does it respect time,\nprivacy, budget? If no \u2014 refuse and offer an alternative.\"* Small models read\nthat as an instruction to hunt for a reason to refuse, and the swarm began\ndeclining ordinary requests \u2014 refusing to connect the user's own mailbox to\nprotect the user's privacy, refusing the user's own credits in the name of\nbeing transparent with the user.\n\nThat is the principles inverted. Autonomy means helping someone act on what is\ntheirs. So the gate was replaced with a floor, and two mechanical backstops were\nadded:\n\n- **Core carries a hard rule it cannot edit**: it may not refuse an ordinary\n  request, and a refusal must name a specific harm to a named person in one\n  plain sentence.\n- **A refusal that names no harm is challenged once.** If it invokes a principle\n  without a victim, Core is asked again to either name the harm or help. If it\n  still names nothing, the user is told plainly that this was over-refusal\n  rather than judgement \u2014 the request is never forced through, because\n  strong-arming a model past its own judgement is its own failure mode.\n\nA refusal that names a real harm passes straight through, unchallenged.\n"
 };
 
 function derivedFiles(){
@@ -1006,6 +1020,46 @@ async function remember(role, content, used){
   }catch(e){}
 }
 
+/* ══════════════ CONNECT INTENT ══════════════
+   "hook me up to X" is a request about this app, not a task to reason about.
+   Answered from what the vault actually supports — no brain call, no refusal. */
+
+var CONNECT_HELP = {
+  gmail:    {have:false, why:"Gmail needs Google's OAuth sign-in flow, which this app does not do yet.",
+             instead:"If you want Google's models rather than your mail, add a Gemini connection — key from aistudio.google.com."},
+  email:    {have:false, why:"Mailboxes need OAuth, which this app does not do yet.", instead:"Gemini or Groq will give the swarm a brain in the meantime."},
+  google:   {have:true,  kind:"gemini", note:"Gemini — key from aistudio.google.com → Get API key."},
+  gemini:   {have:true,  kind:"gemini", note:"key from aistudio.google.com → Get API key."},
+  groq:     {have:true,  kind:"groq",   note:"free, no card — console.groq.com/keys."},
+  openai:   {have:true,  kind:"openai", note:"platform.openai.com → API keys. Paid."},
+  openrouter:{have:true, kind:"openrouter", note:"openrouter.ai → Keys. Many free models."},
+  huggingface:{have:true,kind:"hf",     note:"huggingface.co → Settings → Access Tokens."},
+  github:   {have:true,  kind:"github", note:"a fine-grained token with Contents: read and write."},
+  supabase: {have:true,  kind:"supabase", note:"Project URL and anon key from Settings → API."},
+  credits:  {have:true,  kind:"gemini", note:"Google credits apply to Vertex AI in Google Cloud. This app talks to the AI Studio endpoint, which uses its own key — free tier, no credits needed. Add a Gemini connection and you are running on Google either way."}
+};
+
+function connectAnswer(service){
+  var q=String(service||"").toLowerCase(), hit=null, k;
+  for(k in CONNECT_HELP) if(q.indexOf(k)>=0){ hit=CONNECT_HELP[k]; hit.__k=k; break; }
+
+  var kinds=[]; for(k in KINDS) kinds.push(KINDS[k].label);
+  var open=conns().filter(function(c){return c.enabled}).map(function(c){return c.name});
+
+  if(hit && hit.have)
+    return "Yes — that one I can do.\n\nMenu (=) → Connections → pick "+
+           (KINDS[hit.kind]||{label:hit.__k}).label+" → "+hit.note+
+           "\n\nIt probes itself the moment you add it and tells you if anything is off.";
+
+  if(hit && !hit.have)
+    return "Not yet, and here is the honest reason: "+hit.why+
+           "\n\n"+hit.instead+"\n\nEverything I can reach today: "+kinds.join(", ")+".";
+
+  return "I can reach these: "+kinds.join(", ")+
+         ".\n\nMenu (=) → Connections, pick one, paste a key. Anything not on that list needs a REST connection or is not wired up yet — tell me which and I will say plainly whether it can be done."+
+         (open.length ? "\n\nAlready open: "+open.join(", ")+"." : "");
+}
+
 /* ══════════════ PIPELINE ══════════════ */
 function trim(s,n){ s=String(s==null?"":s); return s.length>n?s.slice(0,n)+"…":s; }
 
@@ -1033,6 +1087,11 @@ async function pipeline(message,status){
 
   mark("gui","active","Reading what you just sent."); status("GUI is reading…");
   var g=await ask("gui",message); used.push("gui");
+  if(g.kind==="connect"){
+    mark("gui","done","They want to hook something up — answering from the vault, not guessing.", g.__conn+" · "+g.__ms+"ms");
+    mark("connection","done","Listed what I can actually reach.");
+    return {text:connectAnswer(g.service||message), used:used.concat(["connection"])};
+  }
   mark("gui","done", g.kind==="smalltalk"?"Handled that myself — small talk.":"Passed it to Core as real work.",
        g.__conn+" · "+g.__ms+"ms");
   if(g.kind==="smalltalk"&&g.reply) return {text:g.reply,used:used};
@@ -1055,6 +1114,33 @@ async function pipeline(message,status){
   var plan=await ask("core",message,override); used.push("core");
   liveEdge("gui","core",false);
 
+  if(plan.kind==="refuse"){
+    /* A refusal has to name a harm. Principle-invoking with no victim named is
+       the over-refusal failure mode, and it gets one honest retry. */
+    var r=String(plan.reason||"");
+    var vague = r.length<25 || /principle|dignity|morality|respect|transparen|approp|guideline|polic/i.test(r);
+    if(vague){
+      mark("core","active","That refusal named no harm. Asking again.");
+      status("Core is reconsidering…");
+      plan = await ask("core", message+
+        "\n\nYou just tried to refuse this with: \""+r+"\"\nThat names no concrete harm to any person. "+
+        "Invoking a principle is not a harm. The user is asking about their own things, which is the autonomy you are told to respect. "+
+        "Either name the specific harm in one plain sentence, or help them properly now.", override);
+      var r2=String(plan.reason||"");
+      if(plan.kind==="refuse" && (r2.length<25 ||
+         /principle|dignity|morality|respect|transparen|approp|guideline|polic/i.test(r2))){
+        /* Challenged once and still no harm named. Do not strong-arm it —
+           say plainly what happened and how to fix it. */
+        mark("core","done","Refused twice, never named a harm.", plan.__ms+"ms");
+        return {text:"Core refused this twice and never named a concrete harm — that is over-refusal, "+
+          "not judgement. Usually it means a small brain is over-reading the principles.\n\n"+
+          "What it actually said: \""+r2+"\"\n\n"+
+          "Two ways to fix it: bind Core to a larger brain on the Agents screen, or sharpen Core's "+
+          "instructions there. Nothing about your request was the problem.",
+          used:used, veto:true, vetoBy:"core-overrefusal"};
+      }
+    }
+  }
   if(plan.kind==="refuse"){
     mark("core","done","Refused: "+trim(plan.reason,90), plan.__ms+"ms");
     return {text:"I can't do that — "+(plan.reason||"it conflicts with my principles")+".", used:used, veto:true, vetoBy:"core"};
@@ -1269,10 +1355,32 @@ function revertGen(i){
 
 
 var sidebar=document.getElementById("sidebar"), shade=document.getElementById("shade");
-document.getElementById("menubtn").onclick=function(){
-  sidebar.classList.toggle("open"); shade.classList.toggle("show",sidebar.classList.contains("open"));
-};
-shade.onclick=function(){ sidebar.classList.remove("open"); shade.classList.remove("show"); };
+var edgetab=document.getElementById("edgetab");
+function setMenu(open){
+  sidebar.classList.toggle("open",open);
+  shade.classList.toggle("show",open);
+  if(edgetab) edgetab.classList.toggle("hidden",open);
+}
+shade.onclick=function(){ setMenu(false); };
+if(edgetab) edgetab.onclick=function(){ setMenu(true); };
+document.getElementById("menubtn").onclick=function(){ setMenu(!sidebar.classList.contains("open")); };
+
+/* swipe in from the left edge to open, swipe back to close */
+(function(){
+  var x0=null,y0=null,tracking=false;
+  document.addEventListener("touchstart",function(e){
+    var t=e.touches[0]; x0=t.clientX; y0=t.clientY;
+    tracking = sidebar.classList.contains("open") ? x0<260 : x0<28;
+  },{passive:true});
+  document.addEventListener("touchmove",function(e){
+    if(!tracking||x0===null) return;
+    var t=e.touches[0], dx=t.clientX-x0, dy=Math.abs(t.clientY-y0);
+    if(dy>40){ tracking=false; return; }
+    if(!sidebar.classList.contains("open") && dx>48){ setMenu(true); tracking=false; }
+    else if(sidebar.classList.contains("open") && dx<-48){ setMenu(false); tracking=false; }
+  },{passive:true});
+  document.addEventListener("touchend",function(){ tracking=false; x0=null; },{passive:true});
+})();
 
 function showScreen(n){
   var sc=document.querySelectorAll(".screen");
@@ -1282,7 +1390,7 @@ function showScreen(n){
   for(var j=0;j<ls.length;j++) ls[j].classList.toggle("active",ls[j].dataset.screen===n);
   document.getElementById("title").textContent=
     {chat:"Chat",sky:"Constellation",conn:"Connections",agents:"Agents",evo:"Evolution",config:"Config"}[n];
-  sidebar.classList.remove("open"); shade.classList.remove("show");
+  setMenu(false);
   if(n==="agents") renderAgents();
   if(n==="conn") { renderKindFields(); renderConns(); }
   if(n==="evo") loadEvo();
@@ -1575,6 +1683,14 @@ document.getElementById("f").onsubmit=async function(e){
 
 /* boot */
 skyInit(); focusNode("core"); renderKindFields(); wireKeyHint();
+(function(){
+  var el=document.getElementById("greeting"); if(!el) return;
+  var b=brains(), r=repoConn();
+  el.textContent = !b.length
+    ? "Ten agents awake, nothing connected yet. Open Connections and hook me up to a brain — every connection you add becomes a new star."
+    : "Ten agents awake, thinking with "+b.map(function(c){return c.name}).join(" and ")+
+      (r? ", committing to "+r.repo : "")+". Ask me for something.";
+})();
 </script>
 </body>
 </html>

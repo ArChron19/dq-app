@@ -254,6 +254,8 @@
       <option value="openrouter">OpenRouter — hundreds of models (brain)</option>
       <option value="compatible">Any OpenAI-compatible URL (brain)</option>
       <option value="supabase">Supabase — memory + chat history</option>
+      <option value="database">Database — any REST-fronted DB</option>
+      <option value="email">Email — send via a provider API</option>
       <option value="github">GitHub — RSI commits its rewrites here</option>
       <option value="rest">Any REST endpoint — connect to anything</option>
     </select>
@@ -352,6 +354,16 @@
 
     <div class="bar"><button class="goldbtn" id="saveCfg">Save</button><span class="note" id="cfgNote"></span></div>
 
+    <label style="margin-top:20px">Vault backup</label>
+    <div class="note">Move your connections between devices as a JSON file — Google Drive, OneDrive, iCloud, wherever you keep it. Encrypting it with a passphrase is strongly recommended: an unencrypted export is your raw API keys sitting in a cloud-synced folder.</div>
+    <input id="vaultPass" type="password" placeholder="passphrase (leave blank = unencrypted export)" autocomplete="off">
+    <div class="bar">
+      <button class="goldbtn" id="vaultExport">Export vault.json</button>
+      <button class="ghostbtn" id="vaultImportBtn">Import vault.json</button>
+      <input id="vaultFile" type="file" accept=".json,application/json" style="display:none">
+    </div>
+    <div class="note" id="vaultNote"></div>
+
     <label style="margin-top:20px">Danger zone</label>
     <div class="bar">
       <button class="redbtn" id="wipe">Erase vault and all local memory</button>
@@ -424,8 +436,8 @@ var DEFAULTS = {
     job:"You are the Rationing agent. Given a task and the available brains (with rough size and cost), choose which should run it. Small brains for classification, routing and short factual answers. Large brains for planning, judgement and synthesis. Rate difficulty 1-5.",
     fmt:'{"connection":"exact connection name","model":"exact model name","difficulty":1,"why":"one short sentence"}'},
   connection:{title:"Connection",color:"#20B2AA",kind:"resident",tokens:260,
-    plain:"I am the vault. I hold every key and hand out narrow permissions — never the keys themselves.",
-    job:"You are the Connection agent, keeper of the vault. An agent wants to reach an outside service. Decide whether that agent plausibly needs it for the stated task, and grant the narrowest useful scope or deny. Deny anything that would send private data somewhere it does not belong. You never reveal secrets, only decisions.",
+    plain:"I am the vault. I connect Droid Queen to anything and anyone — brains, databases, email, repositories, any HTTPS endpoint — and I hold every key myself, handing out narrow permissions instead.",
+    job:"You are the Connection agent, keeper of the vault. Your mandate is broad on purpose: connect Droid Queen to anything and anyone an agent has a real reason to reach — LLM providers, databases, email accounts, repositories, or any other HTTPS service. An agent wants to reach one of these. Decide whether that agent plausibly needs it for the stated task, and grant the narrowest useful scope or deny. Deny anything that would send private data somewhere it does not belong, or use a connection beyond what it was granted for. You never reveal secrets, only decisions.",
     fmt:'{"granted":true,"scope":"narrow description","why":"one sentence"}'},
   core:{title:"Core",color:"#FF4500",kind:"resident",tokens:1500,
     plain:"I am the Core. I plan the work, and I am the only one who may spawn helpers.",
@@ -504,7 +516,11 @@ var KINDS = {
   github:    {label:"GitHub",     base:"https://api.github.com", style:"github", needsKey:true, caps:["repo"],
               hint:"github.com → Settings → Developer settings → Fine-grained tokens. Repository access: only your repo. Permissions: Contents → Read and write.", defModel:""},
   rest:      {label:"REST",       base:"", style:"rest", needsKey:false, caps:["reach"],
-              hint:"Any HTTPS endpoint. Agents may call it as a tool.", defModel:""}
+              hint:"Any HTTPS endpoint. Agents may call it as a tool.", defModel:""},
+  database:  {label:"Database",   base:"", style:"rest", needsKey:true, caps:["database"],
+              hint:"Any HTTP-fronted database — a Supabase project's REST endpoint, PostgREST, Xata, Neon's HTTP driver, Firebase REST. A browser tab can't open a raw database socket, only HTTPS — if yours has no REST layer in front of it, add one or pick a provider that ships one.", defModel:""},
+  email:     {label:"Email",      base:"", style:"rest", needsKey:true, caps:["email"],
+              hint:"A transactional email API — Resend (api.resend.com), Postmark, SendGrid, Mailgun. This sends mail as that account. It cannot read an inbox — IMAP needs a raw socket a browser tab doesn't have.", defModel:""}
 };
 
 function connById(id){ var c=conns(); for(var i=0;i<c.length;i++) if(c[i].id===id) return c[i]; return null; }
@@ -968,6 +984,23 @@ async function probe(conn, opts){
     if(!w.ok){ badline("test commit", w.res?("HTTP "+w.res.status):"failed"); fixlines(diagnose(conn,w.res||{reached:true,status:0},"repo")); return {ok:false,stage:"write"}; }
     okline("test commit", w.unchanged?"already current":(w.commit||"").slice(0,7));
     if(!quiet) await ttype("> repository is writable. rsi can commit unattended.","t-ok",6);
+    return {ok:true, stage:"done"};
+  }
+
+  /* non-chat capabilities (database, email, bare reach) get a real reach+auth
+     check instead of being forced through a chat-completions handshake they
+     were never going to answer correctly */
+  if(K.caps.indexOf("chat")<0){
+    var base0=(conn.base||K.base||"").replace(/\/+$/,"");
+    if(!base0){ badline("base URL","none"); fixlines({fix:["paste the endpoint's base URL"]}); return {ok:false,stage:"reach"}; }
+    if(!quiet) tline('<span class="t-dim">> opening channel …</span>');
+    var rr0 = await httpJSON(base0, {headers:authHeaders(conn)});
+    if(!rr0.reached){ badline("reachable", rr0.err||"no response"); fixlines(diagnose(conn,rr0,"reach")); return {ok:false,stage:"reach"}; }
+    okline("reachable", rr0.ms+"ms");
+    if(rr0.status===401||rr0.status===403){ badline("credentials accepted","HTTP "+rr0.status);
+      fixlines(diagnose(conn,rr0,"auth")); return {ok:false,stage:"auth"}; }
+    okline("responded", "HTTP "+rr0.status);
+    if(!quiet) await ttype("> link established. star is live. (a 4xx on the exact endpoint you call later is normal — this only proved the door opens)","t-ok",6);
     return {ok:true, stage:"done"};
   }
 
@@ -1605,11 +1638,13 @@ function renderTrace(){
    Every step drives the same hidden #cKind + #cFields the old flat form
    used, so probe()/diagnose()/KINDS/KEYSHAPE are untouched — this is a
    narrative layer on top of real logic, not a second implementation. */
-var TARGET_ORDER = ["groq","gemini","openrouter","openai","hf","compatible","supabase","github","rest"];
+var TARGET_ORDER = ["groq","gemini","openrouter","openai","hf","compatible","supabase","database","email","github","rest"];
 function unlockText(K){
   if(K.caps.indexOf("chat")>=0) return "Every agent without its own dedicated brain starts thinking through this the moment it's live.";
   if(K.caps.indexOf("repo")>=0) return "RSI can commit its own rewrites here, unattended — full git history, every edit reversible.";
   if(K.caps.indexOf("history")>=0) return "Chat history and the Library's learned methods start persisting between sessions.";
+  if(K.caps.indexOf("database")>=0) return "Any agent can read and write this database as a granted tool — Connection gates every call.";
+  if(K.caps.indexOf("email")>=0) return "Any agent can send mail through this account as a granted tool — it can't read the inbox, only send.";
   return "Any agent can reach this endpoint as a tool, gated by the vault on every call.";
 }
 function renderTargetGrid(){
@@ -1617,7 +1652,7 @@ function renderTargetGrid(){
   host.innerHTML = TARGET_ORDER.map(function(k){
     var K=KINDS[k], cap=K.caps[0];
     return '<button class="tcard" data-kind="'+k+'"><div class="tt">'+esc(K.label)+'</div>'+
-      '<div class="ts">'+esc(cap==="chat"?"brain":cap==="repo"?"repository":cap==="history"?"memory":"reach")+' · '+esc(K.hint.split(".")[0])+'</div></button>';
+      '<div class="ts">'+esc(cap==="chat"?"brain":cap==="repo"?"repository":cap==="history"?"memory":cap==="database"?"database":cap==="email"?"email":"reach")+' · '+esc(K.hint.split(".")[0])+'</div></button>';
   }).join("");
   host.querySelectorAll(".tcard").forEach(function(b){
     b.onclick=function(){
@@ -1678,6 +1713,7 @@ function igniteAgentList(K){
   }
   if(K.caps.indexOf("repo")>=0) return ["RSI"];
   if(K.caps.indexOf("history")>=0) return ["Library","Connection"];
+  if(K.caps.indexOf("database")>=0 || K.caps.indexOf("email")>=0) return ["Connection"];
   return [];
 }
 
@@ -1703,7 +1739,7 @@ document.getElementById("cAdd").onclick=function(){
   document.getElementById("cProbeNew").style.display="none";
   tclear();
   note.innerHTML='<span class="ok">star born — probing it now</span>';
-  if(fresh.caps.indexOf("chat")>=0 || fresh.kind==="github"){
+  if(fresh.caps.indexOf("chat")>=0 || fresh.kind==="github" || fresh.caps.indexOf("database")>=0 || fresh.caps.indexOf("email")>=0){
     probe(fresh).then(async function(r){
       note.textContent="";
       document.getElementById("cProbeNew").style.display="";
@@ -1838,6 +1874,77 @@ document.getElementById("saveCfg").onclick=function(){
   var n=document.getElementById("cfgNote"); n.innerHTML='<span class="ok">saved</span>';
   setTimeout(function(){n.textContent=""},1500);
 };
+
+/* ══════════════ VAULT BACKUP — export/import connections as JSON ══════════════
+   Real encryption (AES-GCM, key from PBKDF2 over the passphrase), not just
+   base64. An unencrypted export is your raw keys as plaintext in whatever
+   cloud folder you drop it in, so the UI leans hard on the passphrase field. */
+function b64(buf){ return btoa(String.fromCharCode.apply(null, new Uint8Array(buf))); }
+function unb64(s){ var bin=atob(s), u=new Uint8Array(bin.length); for(var i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i); return u; }
+async function deriveKey(pass, salt){
+  var km = await crypto.subtle.importKey("raw", new TextEncoder().encode(pass), "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey(
+    {name:"PBKDF2", salt:salt, iterations:210000, hash:"SHA-256"},
+    km, {name:"AES-GCM", length:256}, false, ["encrypt","decrypt"]);
+}
+
+document.getElementById("vaultExport").onclick=async function(){
+  var note=document.getElementById("vaultNote"), pass=document.getElementById("vaultPass").value;
+  var payload = JSON.stringify({v:1, exported:Date.now(), conns:conns()});
+  var out;
+  if(pass){
+    var salt=crypto.getRandomValues(new Uint8Array(16)), iv=crypto.getRandomValues(new Uint8Array(12));
+    var key=await deriveKey(pass, salt);
+    var ct=await crypto.subtle.encrypt({name:"AES-GCM", iv:iv}, key, new TextEncoder().encode(payload));
+    out=JSON.stringify({enc:true, salt:b64(salt), iv:b64(iv), data:b64(ct)}, null, 2);
+  }else{
+    out=JSON.stringify({enc:false, conns:conns()}, null, 2);
+  }
+  var blob=new Blob([out], {type:"application/json"});
+  var a=document.createElement("a");
+  a.href=URL.createObjectURL(blob); a.download="droid-queen-vault"+(pass?"":"-UNENCRYPTED")+".json";
+  document.body.appendChild(a); a.click(); a.remove();
+  note.innerHTML = pass
+    ? '<span class="ok">exported, encrypted with your passphrase</span>'
+    : '<span class="warn">⚠ exported as plaintext — anyone with this file has your keys</span>';
+};
+
+document.getElementById("vaultImportBtn").onclick=function(){ document.getElementById("vaultFile").click(); };
+document.getElementById("vaultFile").onchange=function(e){
+  var f=e.target.files[0]; if(!f) return;
+  var note=document.getElementById("vaultNote");
+  var reader=new FileReader();
+  reader.onload=async function(){
+    var incoming;
+    try{
+      var obj=JSON.parse(reader.result);
+      if(obj.enc){
+        var pass=document.getElementById("vaultPass").value;
+        if(!pass){ note.innerHTML='<span class="bad">this file is encrypted — enter the passphrase above first</span>'; return; }
+        var key=await deriveKey(pass, unb64(obj.salt));
+        var pt;
+        try{ pt=await crypto.subtle.decrypt({name:"AES-GCM", iv:unb64(obj.iv)}, key, unb64(obj.data)); }
+        catch(err){ note.innerHTML='<span class="bad">wrong passphrase, or the file is corrupted</span>'; return; }
+        incoming = JSON.parse(new TextDecoder().decode(pt)).conns || [];
+      } else {
+        incoming = obj.conns || [];
+      }
+    }catch(err){ note.innerHTML='<span class="bad">not a valid vault file</span>'; return; }
+    if(!incoming.length){ note.innerHTML='<span class="warn">no connections in that file</span>'; return; }
+    var existing=conns();
+    var added=0, updated=0;
+    incoming.forEach(function(c){
+      var match=existing.filter(function(x){return x.kind===c.kind && x.base===c.base && x.name===c.name;})[0];
+      if(match){ Object.assign(match, c); updated++; }
+      else { existing.push(Object.assign({}, c, {id:"c"+Date.now().toString(36)+added})); added++; }
+    });
+    saveConns(existing); renderConns(); skyInit();
+    note.innerHTML='<span class="ok">'+added+' added, '+updated+' updated</span>';
+    e.target.value="";
+  };
+  reader.readAsText(f);
+};
+
 document.getElementById("wipe").onclick=function(){
   if(!confirm("Erase every key, connection, agent edit and learned method on this device?")) return;
   ["conns","agents","methods","pipeline","persona"].forEach(function(k){

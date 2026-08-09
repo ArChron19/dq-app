@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#07090C">
+<title>DROID QUEEN // SHELL</title>
+<style>
+/* ============================================================
+   DQ SHELL v0.1
+   Rule 1: nothing scrolls except elements marked .scroll
+   Rule 2: no ancestor of a rail may have transform/filter/
+           backdrop-filter/perspective/will-change. Ever.
+           (that is what makes fixed children unreachable)
+   Rule 3: canvas pan/zoom lives in ctx.setTransform, never CSS
+   ============================================================ */
+
+:root{
+  --bg:#07090C;
+  --bg-2:#0C1015;
+  --rail:#0A0E13;
+  --line:#1B232D;
+  --line-hot:#2C3946;
+  --ink:#C9D6E2;
+  --ink-dim:#63788C;
+  --ink-max:#EAF2FA;
+
+  --core:#FF4500;      --rationing:#1E90FF;  --connection:#20B2AA;
+  --gui:#FFD700;       --library:#9370DB;    --lawyer:#8B0000;
+  --attacker:#DC143C;  --defense:#FFB6C1;    --rsi:#00E5A0;
+  --subcore:#FF6347;   --task:#32CD32;       --dead:#777777;
+
+  --mono: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, "Roboto Mono", monospace;
+  --rail-h: 46px;
+  --pad-b: env(safe-area-inset-bottom, 0px);
+  --pad-t: env(safe-area-inset-top, 0px);
+}
+
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;height:100%;overflow:hidden;overscroll-behavior:none}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:var(--mono); font-size:13px; line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ---- THE SHELL --------------------------------------------
+   3 grid rows. Rails ARE rows, so they cannot scroll away.
+   100dvh, not 100vh — the address bar collapse on Android
+   Chrome is what pushes bottom controls off-screen.
+------------------------------------------------------------- */
+#app{
+  height:100dvh; height:100svh;
+  display:grid;
+  grid-template-rows: calc(var(--rail-h) + var(--pad-t)) 1fr calc(var(--rail-h) + var(--pad-b));
+  overflow:hidden;
+}
+
+.rail{
+  background:var(--rail);
+  border-color:var(--line);
+  display:flex; align-items:center; gap:2px;
+  padding:0 6px; min-width:0;
+  /* NO transform / filter / backdrop-filter here or on any ancestor */
+}
+#railTop{border-bottom:1px solid var(--line); padding-top:var(--pad-t)}
+#railBot{border-top:1px solid var(--line); padding-bottom:var(--pad-b)}
+
+/* rails overflow horizontally, never vertically */
+.railScroll{
+  display:flex; gap:2px; overflow-x:auto; overflow-y:hidden;
+  scrollbar-width:none; min-width:0; flex:1;
+}
+.railScroll::-webkit-scrollbar{display:none}
+
+.btn{
+  appearance:none; background:transparent; color:var(--ink-dim);
+  border:1px solid transparent; border-radius:2px;
+  font:inherit; font-size:11px; letter-spacing:.14em; text-transform:uppercase;
+  padding:7px 10px; white-space:nowrap; cursor:pointer;
+  transition:color .12s, border-color .12s, background .12s;
+}
+.btn:hover{color:var(--ink)}
+.btn:focus-visible{outline:2px solid var(--gui); outline-offset:1px}
+.btn[aria-pressed="true"], .btn.on{
+  color:var(--ink-max); border-color:var(--line-hot); background:var(--bg-2);
+}
+.btn.wide{padding:7px 14px}
+
+.sep{width:1px;height:20px;background:var(--line);flex:none;margin:0 5px}
+
+.tag{
+  font-size:10px; letter-spacing:.2em; color:var(--ink-dim);
+  text-transform:uppercase; white-space:nowrap; flex:none;
+}
+#brand{color:var(--core); font-weight:700; letter-spacing:.24em; font-size:11px; flex:none; padding-right:4px}
+
+/* ---- STAGE ------------------------------------------------- */
+#stage{position:relative; min-height:0; overflow:hidden; background:var(--bg)}
+#cv{position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:none}
+
+/* DOM views sit in here; only .scroll children scroll */
+#domView{position:absolute; inset:0; display:none; flex-direction:column; min-height:0}
+#domView.show{display:flex}
+.scroll{overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; min-height:0; flex:1}
+
+/* ---- CHAT (TEXT + A/V) ------------------------------------- */
+#chat{
+  position:absolute; left:0; right:0; bottom:0;
+  height:38%; min-height:120px;
+  background:linear-gradient(to top, rgba(7,9,12,.97) 70%, rgba(7,9,12,0));
+  border-top:1px solid var(--line);
+  display:none; flex-direction:column;
+}
+#chat.show{display:flex}
+#log{padding:10px 12px 12px}
+.msg{margin:0 0 9px; max-width:62ch}
+.msg .who{font-size:10px; letter-spacing:.18em; text-transform:uppercase; opacity:.85}
+.msg .txt{color:var(--ink); white-space:pre-wrap; word-break:break-word}
+.msg.me .who{color:var(--ink-dim)}
+
+/* ---- AUDIO-ONLY FACE --------------------------------------- */
+#audioFace{
+  position:absolute; inset:0; display:none;
+  align-items:center; justify-content:center; flex-direction:column; gap:22px;
+  background:var(--bg);
+}
+#audioFace.show{display:flex}
+#orb{width:min(58vw,240px); aspect-ratio:1; display:block}
+#capt{
+  font-size:12px; color:var(--ink-dim); letter-spacing:.06em;
+  max-width:36ch; text-align:center; padding:0 18px; min-height:2.6em;
+}
+#capt b{color:var(--ink-max); font-weight:400}
+
+/* ---- INPUT ------------------------------------------------- */
+#say{
+  flex:1; min-width:0; background:var(--bg-2); color:var(--ink-max);
+  border:1px solid var(--line); border-radius:2px;
+  font:inherit; font-size:13px; padding:8px 10px;
+}
+#say:focus{outline:none; border-color:var(--line-hot)}
+#ptt{
+  flex:none; border:1px solid var(--line-hot); color:var(--gui);
+  background:var(--bg-2); border-radius:2px; font:inherit; font-size:11px;
+  letter-spacing:.14em; text-transform:uppercase; padding:8px 13px; cursor:pointer;
+  touch-action:none; user-select:none;
+}
+#ptt.live{background:var(--gui); color:#000; border-color:var(--gui)}
+#ptt:disabled{opacity:.35; cursor:not-allowed}
+
+/* ---- SHEET (voice picker) ---------------------------------- */
+#sheet{
+  position:absolute; inset:0; display:none;
+  background:rgba(7,9,12,.86); z-index:20;
+  align-items:flex-end; justify-content:center;
+}
+#sheet.show{display:flex}
+#sheetBox{
+  width:min(560px,100%); max-height:78%; background:var(--bg-2);
+  border:1px solid var(--line-hot); border-bottom:none;
+  border-radius:4px 4px 0 0; display:flex; flex-direction:column; min-height:0;
+}
+#sheetBox h2{
+  margin:0; padding:12px 14px; font-size:11px; letter-spacing:.2em;
+  text-transform:uppercase; color:var(--gui); border-bottom:1px solid var(--line);
+  display:flex; justify-content:space-between; align-items:center;
+}
+.vrow{
+  display:flex; align-items:center; gap:8px; padding:9px 14px;
+  border-bottom:1px solid var(--line); cursor:pointer;
+}
+.vrow:hover{background:var(--bg)}
+.vrow.pick{background:#131A22}
+.vrow .nm{flex:1; min-width:0; color:var(--ink-max); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.vrow .lg{font-size:10px; color:var(--ink-dim); letter-spacing:.1em; flex:none}
+.note{padding:10px 14px; font-size:11px; color:var(--ink-dim); line-height:1.6}
+
+/* ---- DATA VIEWS -------------------------------------------- */
+#term{padding:8px 12px; font-size:12px}
+.tline{display:flex; gap:8px; padding:1px 0; white-space:pre-wrap; word-break:break-word}
+.tline .t{color:#33414F; flex:none}
+.tline .a{flex:none; letter-spacing:.1em}
+.tline .m{color:var(--ink); min-width:0}
+
+#ledger{padding:12px}
+.lrow{margin-bottom:11px}
+.lhead{display:flex; justify-content:space-between; font-size:11px; letter-spacing:.1em; margin-bottom:4px}
+.lhead .pct{color:var(--ink-dim)}
+.bar{height:7px; background:#121A22; border-radius:1px; overflow:hidden}
+.bar i{display:block; height:100%}
+
+@media (prefers-reduced-motion: reduce){ *{animation:none !important; transition:none !important} }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ================= TOP RAIL ================= -->
+  <div class="rail" id="railTop">
+    <span id="brand">DQ</span>
+    <div class="railScroll" id="viewTabs"></div>
+    <span class="sep"></span>
+    <button class="btn" id="voiceBtn" title="Voice">VOX</button>
+  </div>
+
+  <!-- ================= STAGE ================= -->
+  <div id="stage">
+    <canvas id="cv"></canvas>
+
+    <div id="domView"><div class="scroll" id="domScroll"></div></div>
+
+    <div id="audioFace">
+      <canvas id="orb"></canvas>
+      <div id="capt">Hold TALK and speak.</div>
+    </div>
+
+    <div id="chat"><div class="scroll" id="log"></div></div>
+
+    <div id="sheet">
+      <div id="sheetBox">
+        <h2>Voice <button class="btn" id="sheetX">Close</button></h2>
+        <div class="scroll" id="voiceList"></div>
+        <div class="note">
+          The Web Speech API exposes no gender field, so this list is scored by
+          voice name against a known female-voice table per platform. Anything
+          scored male or unknown is hidden — press <b>Show all</b> if the one you
+          want is missing.
+          <br><br>
+          <button class="btn" id="showAll">Show all</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= BOTTOM RAIL ================= -->
+  <div class="rail" id="railBot">
+    <div class="railScroll" id="modeTabs"></div>
+    <span class="sep"></span>
+    <input id="say" placeholder="message queen…" autocomplete="off">
+    <button id="ptt">Talk</button>
+  </div>
+
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   1. STATE  (mock runner — swap for the real event feed)
+   ============================================================ */
+const AGENTS = [
+  {id:"core",       name:"Core",            color:"#FF4500", role:"spawner",   burn:0},
+  {id:"rationing",  name:"Rationing",       color:"#1E90FF", role:"budget",    burn:0},
+  {id:"connection", name:"Connection",      color:"#20B2AA", role:"vault",     burn:0},
+  {id:"gui",        name:"GUI",             color:"#FFD700", role:"interface", burn:0},
+  {id:"library",    name:"Library",         color:"#9370DB", role:"memory",    burn:0},
+  {id:"lawyer",     name:"Lawyer",          color:"#8B0000", role:"veto",      burn:0},
+  {id:"attacker",   name:"Ethical Attacker",color:"#DC143C", role:"veto",      burn:0},
+  {id:"defense",    name:"Defense",         color:"#FFB6C1", role:"audit",     burn:0},
+  {id:"rsi",        name:"RSI",             color:"#00E5A0", role:"self-edit", burn:0}
+];
+const CAP = { core:5000, rationing:1200, connection:1200, gui:2000, library:1500,
+              lawyer:900, attacker:900, defense:900, rsi:2500, subcore:2000, task:800 };
+
+const S = {
+  nodes:[], edges:[], events:[], live:false,
+  conns:[
+    {id:"github",   label:"GitHub",    status:"ok",   note:"fine-grained token, repo:write"},
+    {id:"supabase", label:"Supabase",  status:"ok",   note:"chat persistence"},
+    {id:"groq",     label:"Groq",      status:"ok",   note:"free tier"},
+    {id:"gemini",   label:"Gemini",    status:"warn", note:"quota 82% used today"},
+    {id:"openrouter",label:"OpenRouter",status:"cold",note:"no key in vault"},
+    {id:"hf",       label:"HuggingFace",status:"cold",note:"no key in vault"}
+  ]
+};
+
+// seed the constellation from the resident agent set
+AGENTS.forEach((a,i)=>{
+  const ang = (i/AGENTS.length)*Math.PI*2;
+  const r = a.id==="core" ? 0 : 190;
+  S.nodes.push({
+    id:a.id, label:a.name, color:a.color, kind:"resident",
+    x:Math.cos(ang)*r, y:Math.sin(ang)*r, vx:0, vy:0, r:a.id==="core"?26:18,
+    burn:0, cap:CAP[a.id]||1000, alive:true
+  });
+  if(a.id!=="core") S.edges.push({a:"core", b:a.id, w:1});
+});
+
+const nodeById = id => S.nodes.find(n=>n.id===id);
+
+function log(agent, msg){
+  S.events.push({t:Date.now(), agent, msg});
+  if(S.events.length>600) S.events.splice(0,200);
+  if(activeView==="terminal") Views.terminal.update();
+}
+function spend(id, n){
+  const nd = nodeById(id); if(!nd) return;
+  nd.burn = Math.min(nd.cap, nd.burn + n);
+  if(activeView==="ledger") Views.ledger.update();
+}
+
+/* ============================================================
+   2. VIEW REGISTRY
+   canvas views draw into ctx; dom views mount HTML.
+   Adding a view = one object. The shell never changes.
+   ============================================================ */
+const Views = {};
+let activeView = "constellation";
+const reg = (id, def) => { Views[id] = Object.assign({id, kind:"canvas"}, def); };
+
+const cv = document.getElementById("cv");
+const ctx = cv.getContext("2d");
+const domView = document.getElementById("domView");
+const domScroll = document.getElementById("domScroll");
+const cam = {x:0, y:0, z:1};
+let dpr = 1, W = 0, H = 0;
+
+function fitCanvas(){
+  dpr = Math.min(window.devicePixelRatio||1, 2.5);
+  const r = cv.getBoundingClientRect();
+  W = r.width; H = r.height;
+  cv.width = Math.round(W*dpr); cv.height = Math.round(H*dpr);
+}
+new ResizeObserver(fitCanvas).observe(document.getElementById("stage"));
+
+// world <-> screen. Zoom lives here, NOT in a CSS transform,
+// because a transformed ancestor breaks position:fixed children.
+const toWorld = (px,py) => ({x:(px - W/2 - cam.x)/cam.z, y:(py - H/2 - cam.y)/cam.z});
+
+function applyCam(){
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,W,H);
+  ctx.translate(W/2 + cam.x, H/2 + cam.y);
+  ctx.scale(cam.z, cam.z);
+}
+
+function setView(id){
+  activeView = id;
+  const v = Views[id];
+  document.querySelectorAll("#viewTabs .btn").forEach(b=>{
+    b.setAttribute("aria-pressed", String(b.dataset.view===id));
+  });
+  if(v.kind==="dom"){
+    cv.style.display="none"; domView.classList.add("show");
+    domScroll.innerHTML=""; v.mount(domScroll); v.update();
+  } else {
+    domView.classList.remove("show"); cv.style.display="block";
+    fitCanvas();
+  }
+}
+
+/* ---------- VIEW: CONSTELLATION ---------------------------- */
+/* Signature: each node wears a rationing arc. The budget IS
+   the halo, so the graph doubles as the ledger at a glance. */
+reg("constellation", {
+  label:"Constellation",
+  step(){
+    // cheap spring relax, batched — accuracy over framerate
+    for(const e of S.edges){
+      const a=nodeById(e.a), b=nodeById(e.b); if(!a||!b) continue;
+      const dx=b.x-a.x, dy=b.y-a.y, d=Math.hypot(dx,dy)||1;
+      const f=(d-200)*0.0016;
+      if(a.kind!=="resident"||a.id!=="core"){ a.vx+=dx/d*f; a.vy+=dy/d*f; }
+      b.vx-=dx/d*f; b.vy-=dy/d*f;
+    }
+    for(let i=0;i<S.nodes.length;i++) for(let j=i+1;j<S.nodes.length;j++){
+      const a=S.nodes[i], b=S.nodes[j];
+      const dx=b.x-a.x, dy=b.y-a.y; let d=Math.hypot(dx,dy)||1;
+      if(d<260){ const f=(260-d)*0.004/d; a.vx-=dx*f; a.vy-=dy*f; b.vx+=dx*f; b.vy+=dy*f; }
+    }
+    for(const n of S.nodes){
+      if(n.id==="core"){ n.x=n.y=0; n.vx=n.vy=0; continue; }
+      n.vx*=0.86; n.vy*=0.86; n.x+=n.vx; n.y+=n.vy;
+    }
+  },
+  draw(){
+    applyCam();
+    ctx.lineWidth=1;
+    for(const e of S.edges){
+      const a=nodeById(e.a), b=nodeById(e.b); if(!a||!b) continue;
+      ctx.strokeStyle = a.alive&&b.alive ? "rgba(99,120,140,.34)" : "rgba(119,119,119,.18)";
+      ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+    }
+    for(const n of S.nodes){
+      const col = n.alive ? n.color : "#777777";
+      // rationing arc
+      const pct = Math.min(1, n.burn/n.cap);
+      if(pct>0){
+        ctx.beginPath(); ctx.strokeStyle=col; ctx.lineWidth=2.5; ctx.globalAlpha=.9;
+        ctx.arc(n.x, n.y, n.r+7, -Math.PI/2, -Math.PI/2 + pct*Math.PI*2);
+        ctx.stroke(); ctx.globalAlpha=1;
+      }
+      ctx.beginPath(); ctx.arc(n.x,n.y,n.r,0,Math.PI*2);
+      ctx.fillStyle="#0B0F14"; ctx.fill();
+      ctx.strokeStyle=col; ctx.lineWidth=n.id===sel?2.5:1.5; ctx.stroke();
+      ctx.beginPath(); ctx.arc(n.x,n.y,n.r*0.42,0,Math.PI*2); ctx.fillStyle=col; ctx.fill();
+
+      ctx.fillStyle = n.alive ? "#C9D6E2" : "#63788C";
+      ctx.font = "10px "+getComputedStyle(document.body).fontFamily;
+      ctx.textAlign="center";
+      ctx.fillText(n.label.toUpperCase(), n.x, n.y + n.r + 16);
+    }
+  },
+  hit(w){
+    for(const n of S.nodes) if(Math.hypot(w.x-n.x, w.y-n.y) <= n.r+8) return n.id;
+    return null;
+  }
+});
+
+/* ---------- VIEW: WIRE ------------------------------------- */
+reg("wire", {
+  label:"Wire",
+  step(){},
+  draw(){
+    applyCam();
+    const COL={ok:"#32CD32", warn:"#FFD700", cold:"#63788C", fail:"#DC143C"};
+    const n=S.conns.length, R=180;
+    ctx.font="10px "+getComputedStyle(document.body).fontFamily;
+    ctx.textAlign="center";
+    S.conns.forEach((c,i)=>{
+      const ang=(i/n)*Math.PI*2 - Math.PI/2;
+      const x=Math.cos(ang)*R, y=Math.sin(ang)*R;
+      c._x=x; c._y=y;
+      ctx.strokeStyle = c.status==="cold" ? "rgba(99,120,140,.2)" : "rgba(32,178,170,.45)";
+      ctx.setLineDash(c.status==="cold"?[3,5]:[]);
+      ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(x,y); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath(); ctx.arc(x,y,13,0,Math.PI*2);
+      ctx.fillStyle="#0B0F14"; ctx.fill();
+      ctx.strokeStyle=COL[c.status]; ctx.lineWidth=1.5; ctx.stroke();
+      ctx.fillStyle=COL[c.status]; ctx.beginPath(); ctx.arc(x,y,4.5,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle="#C9D6E2"; ctx.fillText(c.label.toUpperCase(), x, y+27);
+      ctx.fillStyle="#63788C"; ctx.fillText(c.note, x, y+39);
+    });
+    // vault hub
+    ctx.beginPath(); ctx.arc(0,0,30,0,Math.PI*2);
+    ctx.fillStyle="#0B0F14"; ctx.fill();
+    ctx.strokeStyle="#20B2AA"; ctx.lineWidth=2; ctx.stroke();
+    ctx.fillStyle="#20B2AA"; ctx.fillText("VAULT",0,3);
+  },
+  hit(w){
+    for(const c of S.conns) if(Math.hypot(w.x-c._x, w.y-c._y)<=16) return "conn:"+c.id;
+    return null;
+  }
+});
+
+/* ---------- VIEW: TRACE ------------------------------------ */
+reg("trace", {
+  label:"Trace",
+  step(){},
+  draw(){
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.clearRect(0,0,W,H);
+    const lanes=AGENTS, lh=Math.min(34,(H-20)/lanes.length), pad=104;
+    const now=Date.now(), span=90000;
+    ctx.font="10px "+getComputedStyle(document.body).fontFamily;
+    lanes.forEach((a,i)=>{
+      const y=12+i*lh+lh/2;
+      ctx.strokeStyle="#141C24"; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(pad,y); ctx.lineTo(W-8,y); ctx.stroke();
+      ctx.fillStyle=a.color; ctx.textAlign="left";
+      ctx.fillText(a.name.toUpperCase().slice(0,13), 8, y+3);
+    });
+    for(const ev of S.events){
+      const i=lanes.findIndex(a=>a.id===ev.agent); if(i<0) continue;
+      const age=now-ev.t; if(age>span) continue;
+      const x=W-8-(age/span)*(W-pad-16);
+      const y=12+i*lh+lh/2;
+      ctx.fillStyle=lanes[i].color; ctx.globalAlpha=Math.max(.25,1-age/span);
+      ctx.fillRect(x-1.5,y-6,3,12); ctx.globalAlpha=1;
+    }
+    ctx.fillStyle="#63788C"; ctx.textAlign="right";
+    ctx.fillText("now", W-8, H-6);
+    ctx.textAlign="left"; ctx.fillText("−90s", pad, H-6);
+  },
+  hit(){ return null; }
+});
+
+/* ---------- VIEW: TERMINAL (dom) --------------------------- */
+reg("terminal", {
+  label:"Terminal", kind:"dom",
+  mount(el){ el.innerHTML = '<div id="term"></div>'; },
+  update(){
+    const t=document.getElementById("term"); if(!t) return;
+    const near = t.parentElement.scrollTop + t.parentElement.clientHeight > t.parentElement.scrollHeight - 40;
+    t.innerHTML = S.events.slice(-260).map(ev=>{
+      const a = AGENTS.find(x=>x.id===ev.agent) || {name:ev.agent, color:"#63788C"};
+      const ts = new Date(ev.t).toTimeString().slice(0,8);
+      return `<div class="tline"><span class="t">${ts}</span>`+
+             `<span class="a" style="color:${a.color}">${a.name.toUpperCase().padEnd(9).slice(0,9)}</span>`+
+             `<span class="m">${esc(ev.msg)}</span></div>`;
+    }).join("");
+    if(near) t.parentElement.scrollTop = t.parentElement.scrollHeight;
+  }
+});
+
+/* ---------- VIEW: LEDGER (dom) ----------------------------- */
+reg("ledger", {
+  label:"Ledger", kind:"dom",
+  mount(el){ el.innerHTML = '<div id="ledger"></div>'; },
+  update(){
+    const l=document.getElementById("ledger"); if(!l) return;
+    l.innerHTML = S.nodes.map(n=>{
+      const pct=Math.round(100*n.burn/n.cap);
+      return `<div class="lrow">
+        <div class="lhead"><span style="color:${n.alive?n.color:'#777'}">${n.label.toUpperCase()}</span>
+        <span class="pct">${n.burn} / ${n.cap} tok · ${pct}%</span></div>
+        <div class="bar"><i style="width:${Math.min(100,pct)}%;background:${n.alive?n.color:'#777'}"></i></div>
+      </div>`;
+    }).join("");
+  }
+});
+
+/* ============================================================
+   3. CANVAS INPUT — pan, pinch, zoom, tap
+   ============================================================ */
+let sel=null;
+const ptrs=new Map(); let pinch0=0, camz0=1, moved=false;
+
+cv.addEventListener("pointerdown", e=>{
+  cv.setPointerCapture(e.pointerId);
+  ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  moved=false;
+  if(ptrs.size===2){
+    const [a,b]=[...ptrs.values()];
+    pinch0=Math.hypot(a.x-b.x,a.y-b.y); camz0=cam.z;
+  }
+});
+cv.addEventListener("pointermove", e=>{
+  const p=ptrs.get(e.pointerId); if(!p) return;
+  const dx=e.clientX-p.x, dy=e.clientY-p.y;
+  if(Math.abs(dx)+Math.abs(dy)>3) moved=true;
+  p.x=e.clientX; p.y=e.clientY;
+  if(ptrs.size===1){ cam.x+=dx; cam.y+=dy; }
+  else if(ptrs.size===2){
+    const [a,b]=[...ptrs.values()];
+    const d=Math.hypot(a.x-b.x,a.y-b.y);
+    if(pinch0>0) cam.z=Math.max(.3,Math.min(3.2, camz0*(d/pinch0)));
+  }
+});
+const drop = e => { ptrs.delete(e.pointerId); if(ptrs.size<2) pinch0=0; };
+cv.addEventListener("pointerup", e=>{
+  if(!moved && ptrs.size===1){
+    const r=cv.getBoundingClientRect();
+    const id=Views[activeView].hit(toWorld(e.clientX-r.left, e.clientY-r.top));
+    if(id) inspect(id);
+  }
+  drop(e);
+});
+cv.addEventListener("pointercancel", drop);
+cv.addEventListener("wheel", e=>{
+  e.preventDefault();
+  cam.z=Math.max(.3,Math.min(3.2, cam.z*(e.deltaY<0?1.1:0.9)));
+},{passive:false});
+
+function inspect(id){
+  if(id.startsWith("conn:")){
+    const c=S.conns.find(x=>x.id===id.slice(5));
+    say("connection", `${c.label}: ${c.status.toUpperCase()} — ${c.note}`);
+    return;
+  }
+  sel=id;
+  const n=nodeById(id);
+  say("gui", `${n.label} · ${n.alive?"live":"deprecated"} · ${n.burn}/${n.cap} tokens used`);
+}
+
+/* ============================================================
+   4. MODES — text / audio / a-v / data
+   ============================================================ */
+const MODES = {
+  text:  {label:"Text",  chat:true,  face:false, voice:false, stage:true },
+  audio: {label:"Audio", chat:false, face:true,  voice:true,  stage:false},
+  av:    {label:"A/V",   chat:true,  face:false, voice:true,  stage:true },
+  data:  {label:"Data",  chat:false, face:false, voice:false, stage:true }
+};
+let mode="text";
+
+function setMode(m){
+  mode=m; const cfg=MODES[m];
+  document.getElementById("chat").classList.toggle("show", cfg.chat);
+  document.getElementById("audioFace").classList.toggle("show", cfg.face);
+  document.getElementById("say").style.display = cfg.chat ? "" : "none";
+  document.getElementById("ptt").disabled = !cfg.voice || !ASR.ok;
+  document.querySelectorAll("#modeTabs .btn").forEach(b=>{
+    b.setAttribute("aria-pressed", String(b.dataset.mode===m));
+  });
+  if(!cfg.voice) { ASR.stop(); TTS.stop(); }
+  localStorage.setItem("dq.mode", m);
+}
+
+/* ============================================================
+   5. VOICE — female-only TTS + push-to-talk ASR
+   Web Speech exposes no gender field, so selection is a
+   curated name table per platform + manual override.
+   ============================================================ */
+const FEMALE = [
+  // Apple
+  "samantha","karen","moira","tessa","fiona","victoria","allison","ava","susan",
+  "zoe","nicky","alice","amelie","anna","ellen","joana","luciana","milena",
+  "monica","paulina","sara","satu","yuna","kyoko","ting-ting","sin-ji","mei-jia",
+  // Microsoft
+  "zira","hazel","heera","catherine","linda","susan","eva","aria","jenny","michelle",
+  "ana","sonia","natasha","clara","libby",
+  // Google / Android / Chrome OS
+  "google us english","google uk english female","google español",
+  "google français","google deutsch","google italiano","google नेपाली",
+  "english united states female","female",
+  // Samsung
+  "grace","stephanie","tracy","alexandra","serena"
+];
+const MALE = ["david","mark","daniel","alex","fred","james","george","ryan","guy",
+              "tom","oliver","aaron","arthur","male","rishi","liam","eric","brandon",
+              "google uk english male","thomas","jorge","diego","juan","yannick","luca"];
+
+const TTS = {
+  voices:[], pick:null, showAll:false,
+  init(){
+    const load = () => {
+      TTS.voices = speechSynthesis.getVoices();
+      if(!TTS.voices.length) return;
+      const saved = localStorage.getItem("dq.voice");
+      TTS.pick = TTS.voices.find(v=>v.voiceURI===saved) || TTS.best();
+      renderVoices();
+    };
+    load(); speechSynthesis.onvoiceschanged = load;
+  },
+  score(v){
+    const n=(v.name+" "+(v.voiceURI||"")).toLowerCase();
+    if(MALE.some(m=>n.includes(m))) return -1;
+    if(FEMALE.some(f=>n.includes(f))) return 2;
+    return 0;                       // unknown — hidden unless Show all
+  },
+  female(){ return TTS.voices.filter(v=>TTS.score(v)>0); },
+  best(){
+    const f=TTS.female();
+    const lang=(navigator.language||"en-US").slice(0,2);
+    return f.find(v=>v.lang.startsWith(lang) && v.localService)
+        || f.find(v=>v.lang.startsWith(lang))
+        || f[0] || null;
+  },
+  speak(text){
+    if(!MODES[mode].voice || !text) return;
+    speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance(text);
+    if(TTS.pick) { u.voice=TTS.pick; u.lang=TTS.pick.lang; }
+    u.rate=1.0; u.pitch=1.05;
+    u.onstart=()=>{ orb.speaking=true; };
+    u.onend  =()=>{ orb.speaking=false; if(mode==="audio") ASR.start(true); };
+    speechSynthesis.speak(u);
+  },
+  stop(){ speechSynthesis.cancel(); orb.speaking=false; }
+};
+
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const ASR = {
+  ok: !!SR, rec:null, want:false, hold:false, buf:"",
+  init(){
+    if(!SR) return;
+    const r = ASR.rec = new SR();
+    r.continuous = true; r.interimResults = true;
+    r.lang = navigator.language || "en-US";
+    r.onresult = ev => {
+      let fin="", itm="";
+      for(let i=ev.resultIndex;i<ev.results.length;i++){
+        const s=ev.results[i];
+        if(s.isFinal) fin += s[0].transcript; else itm += s[0].transcript;
+      }
+      if(itm) caption(itm, false);
+      if(fin){ caption(fin, true); submit(fin.trim()); }
+    };
+    // Chrome kills recognition after a silence window. Auto-restart
+    // is mandatory or "always listening" dies ~8s in.
+    r.onend = () => { orb.listening=false; if(ASR.want) { try{ r.start(); orb.listening=true; }catch(e){} } };
+    r.onerror = e => {
+      if(e.error==="not-allowed"){ ASR.want=false; say("gui","Microphone blocked. Allow it in the site settings, then press Talk again."); }
+      if(e.error==="no-speech" && ASR.want) return;
+    };
+  },
+  start(latch){
+    if(!SR || !MODES[mode].voice) return;
+    ASR.want = latch===true ? true : ASR.want;
+    try{ ASR.rec.start(); orb.listening=true; }catch(e){}
+  },
+  stop(){ ASR.want=false; try{ ASR.rec && ASR.rec.stop(); }catch(e){} orb.listening=false; }
+};
+
+function caption(t, final){
+  const c=document.getElementById("capt");
+  c.innerHTML = final ? "<b>"+esc(t)+"</b>" : esc(t);
+}
+
+/* ---------- ORB (audio-only face) --------------------------- */
+const orbCv=document.getElementById("orb"), octx=orbCv.getContext("2d");
+const orb={listening:false, speaking:false, ph:0};
+function drawOrb(){
+  const d=Math.min(window.devicePixelRatio||1,2.5);
+  const s=orbCv.clientWidth||240;
+  if(orbCv.width!==s*d){ orbCv.width=s*d; orbCv.height=s*d; }
+  octx.setTransform(d,0,0,d,0,0); octx.clearRect(0,0,s,s);
+  const c=s/2, base=s*0.30;
+  orb.ph += orb.speaking?0.13 : orb.listening?0.06 : 0.018;
+  const col = orb.speaking ? "#FFD700" : orb.listening ? "#20B2AA" : "#63788C";
+  for(let i=0;i<3;i++){
+    const amp=(orb.speaking?10:orb.listening?5:2)*(1+i*0.5);
+    const r=base + Math.sin(orb.ph - i*0.7)*amp + i*11;
+    octx.beginPath(); octx.arc(c,c,r,0,Math.PI*2);
+    octx.strokeStyle=col; octx.globalAlpha=(0.55 - i*0.15); octx.lineWidth=1.5; octx.stroke();
+  }
+  octx.globalAlpha=1;
+  octx.beginPath(); octx.arc(c,c,base*0.5,0,Math.PI*2); octx.fillStyle=col; octx.fill();
+}
+
+/* ============================================================
+   6. CONVERSATION (stub — wire to Core here)
+   ============================================================ */
+function esc(s){ return String(s).replace(/[&<>]/g, m=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[m])); }
+
+function say(agentId, text){
+  const a = AGENTS.find(x=>x.id===agentId) || {name:"Queen", color:"#FF4500"};
+  const el=document.createElement("div");
+  el.className="msg";
+  el.innerHTML=`<div class="who" style="color:${a.color}">${a.name}</div><div class="txt">${esc(text)}</div>`;
+  const logEl=document.getElementById("log");
+  logEl.appendChild(el); logEl.parentElement.scrollTop=logEl.parentElement.scrollHeight;
+  log(agentId, text);
+  caption(text, true);
+  TTS.speak(text);
+}
+function mine(text){
+  const el=document.createElement("div");
+  el.className="msg me";
+  el.innerHTML=`<div class="who">You</div><div class="txt">${esc(text)}</div>`;
+  const logEl=document.getElementById("log");
+  logEl.appendChild(el); logEl.parentElement.scrollTop=logEl.parentElement.scrollHeight;
+}
+function submit(text){
+  if(!text) return;
+  mine(text);
+  spend("gui", 40);
+  // >>> replace with Core dispatch <<<
+  setTimeout(()=>{
+    spend("core", 120);
+    say("gui", `Heard: "${text}". Core dispatch is not wired yet — this shell is the interface layer only.`);
+  }, 350);
+}
+
+/* ============================================================
+   7. RAILS
+   ============================================================ */
+const viewTabs=document.getElementById("viewTabs");
+Object.values(Views).forEach(v=>{
+  const b=document.createElement("button");
+  b.className="btn"; b.textContent=v.label; b.dataset.view=v.id;
+  b.setAttribute("aria-pressed", String(v.id===activeView));
+  b.onclick=()=>setView(v.id);
+  viewTabs.appendChild(b);
+});
+const modeTabs=document.getElementById("modeTabs");
+Object.entries(MODES).forEach(([k,m])=>{
+  const b=document.createElement("button");
+  b.className="btn wide"; b.textContent=m.label; b.dataset.mode=k;
+  b.onclick=()=>setMode(k);
+  modeTabs.appendChild(b);
+});
+
+const sayEl=document.getElementById("say");
+sayEl.addEventListener("keydown", e=>{
+  if(e.key==="Enter"){ const v=sayEl.value.trim(); sayEl.value=""; submit(v); }
+});
+
+// push-to-talk: hold = talk, double-tap = latch open
+const ptt=document.getElementById("ptt");
+let lastTap=0;
+ptt.addEventListener("pointerdown", e=>{
+  e.preventDefault();
+  const now=Date.now();
+  if(now-lastTap<320){ ASR.want=!ASR.want; ASR.want?ASR.start(true):ASR.stop(); }
+  else { ASR.hold=true; ASR.start(false); }
+  lastTap=now;
+  ptt.classList.add("live");
+});
+const pttUp = () => {
+  if(ASR.hold && !ASR.want){ ASR.stop(); ptt.classList.remove("live"); }
+  else if(!ASR.want) ptt.classList.remove("live");
+  ASR.hold=false;
+};
+ptt.addEventListener("pointerup", pttUp);
+ptt.addEventListener("pointercancel", pttUp);
+
+/* voice sheet */
+const sheet=document.getElementById("sheet");
+document.getElementById("voiceBtn").onclick=()=>{ sheet.classList.add("show"); renderVoices(); };
+document.getElementById("sheetX").onclick=()=>sheet.classList.remove("show");
+document.getElementById("showAll").onclick=()=>{ TTS.showAll=!TTS.showAll; renderVoices(); };
+
+function renderVoices(){
+  const el=document.getElementById("voiceList"); if(!el) return;
+  const list = TTS.showAll ? TTS.voices : TTS.female();
+  if(!list.length){
+    el.innerHTML='<div class="note">No voices detected yet. On Android, open Settings › Accessibility › Text-to-speech and install a voice pack, then reload.</div>';
+    return;
+  }
+  el.innerHTML = list.map(v=>{
+    const on = TTS.pick && v.voiceURI===TTS.pick.voiceURI;
+    return `<div class="vrow ${on?'pick':''}" data-uri="${esc(v.voiceURI)}">
+      <span class="nm">${esc(v.name)}</span><span class="lg">${esc(v.lang)}</span>
+      <span class="lg">${on?'▶ ACTIVE':''}</span></div>`;
+  }).join("");
+  el.querySelectorAll(".vrow").forEach(r=>{
+    r.onclick=()=>{
+      TTS.pick = TTS.voices.find(v=>v.voiceURI===r.dataset.uri);
+      localStorage.setItem("dq.voice", TTS.pick.voiceURI);
+      renderVoices();
+      speechSynthesis.cancel();
+      const u=new SpeechSynthesisUtterance("Droid Queen online.");
+      u.voice=TTS.pick; u.lang=TTS.pick.lang; u.pitch=1.05;
+      speechSynthesis.speak(u);
+    };
+  });
+}
+
+/* ============================================================
+   8. LOOP — batched, accuracy over framerate
+   ============================================================ */
+let acc=0, last=performance.now();
+function frame(now){
+  const dt=now-last; last=now; acc+=dt;
+  if(acc>=1000/30){
+    acc=0;
+    const v=Views[activeView];
+    if(v.kind!=="dom"){ v.step && v.step(); v.draw(); }
+    if(MODES[mode].face) drawOrb();
+  }
+  requestAnimationFrame(frame);
+}
+
+/* ============================================================
+   9. BOOT
+   ============================================================ */
+fitCanvas();
+TTS.init();
+ASR.init();
+setMode(localStorage.getItem("dq.mode") || "text");
+setView("constellation");
+requestAnimationFrame(frame);
+
+log("gui","shell v0.1 online");
+log("connection","vault swept — 3 ok, 1 warn, 2 cold");
+log("rationing","daily pool reset");
+if(!ASR.ok) say("gui","Speech input is unavailable in this browser. Chrome on Android or desktop supports it; iOS Safari does not.");
+else say("gui","Shell online. Pick a mode below. Hold Talk to speak, double-tap Talk to leave the mic open.");
+
+// heartbeat so Trace/Terminal/Ledger have live signal until the runner is wired
+setInterval(()=>{
+  const a=AGENTS[Math.floor(Math.random()*AGENTS.length)];
+  const msgs=["method cached","probe ok","budget check","pattern deduped","veto cleared","gen snapshot"];
+  log(a.id, msgs[Math.floor(Math.random()*msgs.length)]);
+  spend(a.id, Math.floor(Math.random()*40));
+  if(activeView==="ledger") Views.ledger.update();
+}, 2600);
+</script>
+</body>
+</html>

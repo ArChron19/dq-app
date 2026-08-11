@@ -140,10 +140,13 @@
 
   /* ---- audio-only face overlay — sits over the screens, below the
      sidebar/edge-tab/shade so navigation is always reachable ---- */
-  #audioFace{position:fixed;left:0;right:0;top:0;bottom:0;z-index:25;display:none;
+  #audioFace{position:fixed;left:0;right:0;top:0;bottom:var(--modebarH,58px);z-index:25;display:none;
              background:var(--bg);align-items:center;justify-content:center;
              flex-direction:column;gap:20px;padding-top:52px}
   #audioFace.show{display:flex}
+  #audioFace .exitAudio{position:absolute;top:calc(10px + env(safe-area-inset-top));right:12px;
+    border:1px solid var(--line);color:var(--dim);background:var(--panel2);border-radius:14px;
+    padding:6px 12px;font-size:11px;z-index:2}
   #orb{width:min(56vw,230px);aspect-ratio:1;display:block}
   #capt{max-width:34ch;text-align:center;font-size:13px;color:var(--dim);padding:0 18px;min-height:2.6em}
   #capt b{color:var(--ink);font-weight:600}
@@ -374,6 +377,7 @@
 
 <!-- AUDIO-ONLY FACE — overlays whichever screen is active -->
 <div id="audioFace">
+  <button class="exitAudio" id="exitAudioBtn">✕ Text</button>
   <canvas id="orb"></canvas>
   <div id="capt">Hold Talk and speak.</div>
 </div>
@@ -2220,6 +2224,7 @@ function setMode(m){
   if(m==="data"){ showScreen("sky"); showSkyPane("ledger"); }
 }
 document.querySelectorAll(".modebtn").forEach(function(b){ b.onclick=function(){ setMode(b.dataset.mode); }; });
+document.getElementById("exitAudioBtn").onclick=function(){ setMode("text"); };
 
 var talkbtn=document.getElementById("talkbtn"), lastTap=0, holding=false;
 talkbtn.addEventListener("pointerdown", function(e){
@@ -2238,6 +2243,14 @@ talkbtn.addEventListener("pointerup", talkUp);
 talkbtn.addEventListener("pointercancel", talkUp);
 
 /* boot */
+/* the mode bar's real height, not a guess — device chrome and safe-area
+   insets vary too much (tablet vs desktop Chrome) to hardcode this, and a
+   stale guess is exactly what trapped the previous build in audio mode */
+var modebarEl=document.getElementById("modebar");
+function syncModebarH(){ document.documentElement.style.setProperty("--modebarH", modebarEl.getBoundingClientRect().height+"px"); }
+new ResizeObserver(syncModebarH).observe(modebarEl);
+syncModebarH();
+
 TTS.init(); ASR.init(); setMode(MODE);
 skyInit(); focusNode("core"); renderKindFields(); wireKeyHint();
 (function(){

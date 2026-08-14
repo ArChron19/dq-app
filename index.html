@@ -6,28 +6,27 @@
 <meta name="theme-color" content="#0d0d14">
 <title>Droid Queen</title>
 <style>
-  :root{--bg:#0a0a0a;--panel:#121212;--panel2:#181818;--ink:#33ff66;--dim:#2f8f4e;
-        --gold:#c9a227;--line:#4d4d4d;}
-  *{box-sizing:border-box;margin:0}
   body{background:var(--bg);color:var(--ink);
        font:15px/1.55 ui-monospace,"Cascadia Mono","SF Mono",Consolas,"Liberation Mono",monospace;
-       display:flex;flex-direction:column;height:100vh;height:100dvh;
+       display:flex;flex-direction:column;height:100dvh;
        overflow:hidden;overscroll-behavior:none}
+
   header{padding:10px 14px;background:var(--panel);display:flex;gap:12px;align-items:center;
-         z-index:30;flex:none;position:sticky;top:0}
-  #menubtn{background:none;border:0;color:var(--gold);font-size:26px;font-weight:800;line-height:1;padding:0 6px}
-  header h1{font-size:16px;font-weight:600}
-  header small{color:var(--dim);margin-left:auto;font-size:12px}
-  #sidebar{position:fixed;top:0;left:0;bottom:0;width:224px;background:var(--panel);
+         z-index:30;flex:none;border-bottom:1px solid var(--line)}
+  #menubtn{background:none;border:0;color:var(--gold);font-size:26px;font-weight:800;line-height:1;padding:0 6px;cursor:pointer}
+  header h1{font-size:16px;font-weight:600;flex:1}
+  header small{color:var(--dim);font-size:12px}
+
+  #sidebar{position:fixed;top:0;left:0;bottom:0;width:220px;background:var(--panel);
            border-right:1px solid var(--line);transform:translateX(-100%);
-           transition:transform .18s ease;z-index:40;padding-top:12px}
+           transition:transform .18s ease;z-index:40;padding-top:12px;overflow-y:auto}
   #sidebar.open{transform:translateX(0)}
-  #sidebar .brand{color:var(--gold);font-weight:700;padding:8px 18px 14px;letter-spacing:.5px}
+  #sidebar .brand{color:var(--gold);font-weight:700;padding:8px 18px 14px;letter-spacing:.5px;font-size:14px}
   #sidebar a{display:block;padding:12px 18px;color:var(--ink);text-decoration:none;font-size:15px}
   #sidebar a.active{background:var(--bg);color:var(--gold);border-left:3px solid var(--gold)}
   #shade{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;z-index:35}
   #shade.show{display:block}
-  /* left-edge pull tab — always reachable, never scrolls away */
+
   #edgetab{position:fixed;left:0;top:50%;transform:translateY(-50%);z-index:33;
            width:24px;height:72px;padding:0;border:1px solid var(--line);border-left:0;
            border-radius:0;background:var(--panel);color:var(--gold);
@@ -36,38 +35,139 @@
            transition:opacity .15s,background .15s}
   #edgetab:active{opacity:1;background:var(--gold);color:#1a1508}
   #edgetab.hidden{opacity:0;pointer-events:none}
+
   .screen{flex:1;display:none;flex-direction:column;overflow:hidden}
   .screen.show{display:flex}
-  #log{flex:1;min-height:0;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:9px}
-  .msg{max-width:88%;padding:9px 13px;border-radius:0;white-space:pre-wrap;font-size:15px}
-  .you{align-self:flex-end;background:var(--gold);color:#1a1508;border-bottom-right-radius:0}
-  .dq{align-self:flex-start;background:var(--panel2);border-bottom-left-radius:0}
+
+  /* ─ CHAT SCREEN ─ */
+  #screen-chat{display:flex !important;flex-direction:column}
+  #log{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;
+       padding:12px 10px;display:flex;flex-direction:column;gap:8px}
+  #log:empty::after{content:"Waking up…";color:var(--dim);margin:auto;font-style:italic}
+  .msg{max-width:88%;padding:9px 13px;border-radius:var(--r);white-space:pre-wrap;font-size:15px}
+  .you{align-self:flex-end;background:var(--gold);color:#1a1508;border-bottom-right-radius:4px}
+  .dq{align-self:flex-start;background:var(--panel2);border-bottom-left-radius:4px}
   .dq.busy{color:var(--dim);font-style:italic}
   .dq.veto{border-left:3px solid #DC143C}
-  form#f{display:flex;gap:8px;padding:10px;padding-bottom:calc(10px + env(safe-area-inset-bottom));background:var(--panel)}
+
+  #chatbar{display:flex;gap:8px;padding:10px;padding-bottom:calc(10px + env(safe-area-inset-bottom));
+           background:var(--panel);border-top:1px solid var(--line);flex:none;align-items:flex-end}
   #box{flex:1;background:var(--bg);color:var(--ink);border:1px solid var(--line);
-       border-radius:0;padding:10px 15px;font-size:16px;outline:none}
-  .goldbtn{background:var(--gold);color:#1a1508;border:0;border-radius:0;padding:9px 18px;font-weight:700;font-size:14px}
-  .goldbtn:disabled{opacity:.45}
-  .ghostbtn{background:none;border:1px solid var(--line);color:var(--dim);border-radius:0;padding:9px 16px;font-size:14px}
-  .redbtn{background:none;border:1px solid #5a2030;color:#c9556f;border-radius:0;padding:8px 14px;font-size:13px}
-  .pad{padding:16px;overflow-y:auto;flex:1;min-height:0;-webkit-overflow-scrolling:touch}
-  .pad label{display:block;color:var(--dim);font-size:12px;margin:13px 0 5px;text-transform:uppercase;letter-spacing:.5px}
+       border-radius:var(--r);padding:10px 13px;font-size:15px;outline:none;
+       max-height:100px;resize:none;-webkit-appearance:none}
+  #box::placeholder{color:var(--dim)}
+  #send{background:var(--gold);color:#1a1508;border:0;border-radius:var(--r);
+        padding:10px 16px;font-weight:700;font-size:14px;flex:none;cursor:pointer}
+  #send:disabled{opacity:.4;cursor:not-allowed}
+
+  /* ─ FAB (Connections drawer trigger) ─ */
+  #connFab{position:fixed;right:14px;bottom:calc(12px + env(safe-area-inset-bottom));
+           width:48px;height:48px;border-radius:50%;background:var(--gold);color:#1a1508;
+           border:0;font-size:20px;font-weight:700;z-index:50;
+           box-shadow:0 2px 12px rgba(0,0,0,.6);cursor:pointer;display:flex;
+           align-items:center;justify-content:center}
+  #connFab:active{transform:scale(.95)}
+
+  /* ─ CONNECTIONS DRAWER (MODAL) ─ */
+  #connDrawer{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:55;display:none;
+              align-items:flex-end;animation:slideUp .3s ease}
+  #connDrawer.show{display:flex}
+  @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+  #connPanel{background:var(--panel);width:100%;max-height:90dvh;border-radius:var(--r) var(--r) 0 0;
+             display:flex;flex-direction:column;overflow:hidden}
+  #connHeader{display:flex;align-items:center;gap:12px;padding:12px 14px;
+              border-bottom:1px solid var(--line);flex:none}
+  #connHeader h2{flex:1;font-size:16px}
+  #connHeader .closeDrawer{background:none;border:0;color:var(--dim);font-size:22px;cursor:pointer;padding:0}
+  #connBody{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 14px}
+
+  /* ─ OTHER SCREENS (sidebar-based) ─ */
+  .pad{padding:14px;overflow-y:auto;flex:1;min-height:0;-webkit-overflow-scrolling:touch}
+  .pad label{display:block;color:var(--dim);font-size:11.5px;margin:11px 0 4px;text-transform:uppercase;letter-spacing:.5px}
+  .pad label:first-child{margin-top:0}
   .pad input,.pad select,.pad textarea{width:100%;background:var(--bg);color:var(--ink);
-      border:1px solid var(--line);border-radius:0;padding:10px 12px;font-size:15px;outline:none}
-  .pad textarea{font:13px/1.45 ui-monospace,Menlo,Consolas,monospace;resize:vertical;min-height:80px}
-  .bar{display:flex;gap:8px;padding:10px 0;flex-wrap:wrap;align-items:center}
-  .note{color:var(--dim);font-size:13px}
+      border:1px solid var(--line);border-radius:var(--r);padding:9px 12px;font-size:14px;outline:none}
+  .pad textarea{font:13px/1.45 ui-monospace,Menlo,Consolas,monospace;resize:vertical;min-height:70px}
+  .bar{display:flex;gap:8px;padding:8px 0;flex-wrap:wrap;align-items:center}
+  .note{color:var(--dim);font-size:12.5px;line-height:1.5}
   .ok{color:#32CD32}.bad{color:#DC143C}.warn{color:var(--gold)}
-  .card{background:var(--panel2);border:1px solid var(--line);border-radius:0;padding:12px;margin-top:10px}
+  .goldbtn{background:var(--gold);color:#1a1508;border:0;border-radius:var(--r);padding:8px 16px;font-weight:700;font-size:13px;cursor:pointer}
+  .goldbtn:disabled{opacity:.4}
+  .ghostbtn{background:none;border:1px solid var(--line);color:var(--dim);border-radius:var(--r);padding:8px 14px;font-size:13px;cursor:pointer}
+  .redbtn{background:none;border:1px solid #5a2030;color:#c9556f;border-radius:var(--r);padding:7px 12px;font-size:12px;cursor:pointer}
+  .card{background:var(--panel2);border:1px solid var(--line);border-radius:var(--r);padding:11px;margin-top:8px}
   .card .top{display:flex;align-items:center;gap:9px}
-  .dot{width:12px;height:12px;border-radius:0;flex:none}
-  .card b{font-size:15px}
-  .card .role{color:var(--dim);font-size:12px;margin-left:auto}
-  .card .sub{color:var(--dim);font-size:12.5px;margin-top:3px}
-  .pill{display:inline-block;background:#22213280;border:1px solid var(--line);border-radius:0;
-        padding:2px 9px;font-size:11.5px;color:var(--dim);margin:5px 5px 0 0}
-  .pill.tap{cursor:pointer;color:var(--ink);border-color:#3a3956}
+  .dot{width:10px;height:10px;border-radius:50%;flex:none}
+  .card b{font-size:14px}
+  .card .role{color:var(--dim);font-size:11.5px;margin-left:auto}
+  .card .sub{color:var(--dim);font-size:12px;margin-top:3px}
+  .pill{display:inline-block;background:#22213280;border:1px solid var(--line);border-radius:6px;
+        padding:2px 8px;font-size:11px;color:var(--dim);margin:4px 4px 0 0}
+  .pill.tap{cursor:pointer;color:var(--ink)}
+
+  /* ─ TERMINAL ─ */
+  #term,#term2{background:#000;border:1px solid var(--line);border-radius:var(--r);
+    padding:10px 12px;min-height:50px;max-height:200px;overflow-y:auto;font-size:12px;
+    line-height:1.6;color:#aaa;margin-top:6px}
+  .t-ok{color:#5cff9d}.t-bad{color:#ff6b6b}.t-warn{color:var(--gold)}.t-dim{color:#555}
+
+  /* ─ CONNECTION MISSION ─ */
+  #missionSteps{display:flex;gap:5px;margin:8px 0 4px}
+  .mstep{flex:1;text-align:center;padding:6px 4px;border:1px solid var(--line);
+         border-radius:8px;font-size:10px;letter-spacing:.04em;color:var(--dim);background:var(--panel2)}
+  .mstep.on{border-color:var(--gold);color:var(--gold);background:#241f0c}
+  .mstep.done{border-color:#2f9e57;color:#5cff9d}
+  .mpane{display:none}.mpane.show{display:block}
+  #targetGrid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:7px}
+  .tcard{border:1px solid var(--line);border-radius:var(--r);padding:9px;
+         background:var(--panel2);text-align:left;cursor:pointer}
+  .tcard:active{border-color:var(--gold)}
+  .tcard .tt{font-size:12.5px;font-weight:700;color:var(--ink)}
+  .tcard .ts{font-size:10.5px;color:var(--dim);margin-top:2px;line-height:1.4}
+  #missionBrief{border:1px solid var(--line);border-radius:8px;padding:9px 11px;
+                margin:6px 0;background:var(--panel2)}
+  #missionBrief b{color:var(--gold)}
+  .ignite{border:1px solid #2f9e57;border-radius:var(--r);padding:10px;margin-top:8px;background:#0c1a10}
+  .ignite h3{margin:0 0 5px;color:#5cff9d;font-size:13px}
+  .ignite p{margin:0 0 8px;font-size:12px;color:var(--dim);line-height:1.5}
+
+  /* ─ WIDGETS ─ */
+  .widget{border:1px solid var(--line);border-radius:var(--r);background:var(--panel2);overflow:hidden;margin-top:8px}
+  .wtitle{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line);cursor:pointer;user-select:none}
+  .wtitle .wlabel{flex:1;font-size:12.5px;font-weight:700;color:var(--ink)}
+  .wtitle .wclose{font-size:14px;color:var(--dim);cursor:pointer}
+  .wbody{padding:11px;font-size:13px;line-height:1.6}
+
+  /* ─ MODE BAR ─ */
+  #modebar{display:flex;gap:6px;padding:6px 10px;background:var(--panel);
+           border-top:1px solid var(--line);flex:none;overflow-x:auto}
+  .modebtn{background:none;border:1px solid var(--line);color:var(--dim);
+           border-radius:var(--r);padding:6px 12px;font-size:12px;white-space:nowrap;cursor:pointer}
+  .modebtn.on{background:var(--gold);color:#1a1508;border-color:var(--gold);font-weight:700}
+  #talkbtn,#voxbtn{border:1px solid var(--line);background:none;color:var(--dim);
+           border-radius:var(--r);padding:6px 12px;font-size:12px;cursor:pointer}
+  #talkbtn.latched{background:#1a1508;border-color:var(--gold);color:var(--gold)}
+
+  /* ─ AUDIO ─ */
+  #audioFace{position:fixed;left:0;right:0;top:0;bottom:var(--modebarH,58px);
+             z-index:25;display:none;flex-direction:column;align-items:center;
+             justify-content:center;background:var(--bg)}
+  #audioFace.show{display:flex}
+  #audioFace .exitAudio{position:absolute;top:calc(10px + env(safe-area-inset-top));right:12px;
+    border:1px solid var(--line);color:var(--dim);background:var(--panel2);border-radius:14px;
+    padding:6px 12px;font-size:11px;z-index:2;cursor:pointer}
+  #capt{font-size:13px;color:var(--dim);margin-top:16px;text-align:center;padding:0 20px}
+
+  /* ─ VOICE PICKER ─ */
+  #voxSheet{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:60;display:none;align-items:flex-end}
+  #voxSheet.show{display:flex}
+  #voxBox{background:var(--panel);border-radius:var(--r) var(--r) 0 0;width:100%;max-height:72dvh;
+          display:flex;flex-direction:column;padding:14px 15px;border-top:1px solid var(--line)}
+  #voxBox h2{font-size:15px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between}
+  .voxrow{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);cursor:pointer}
+  .voxrow .vn{flex:1;font-size:13px}
+  .voxrow .lg{font-size:11px;color:var(--dim);flex:none}
+
   .pill.tap:active{background:var(--gold);color:#1a1508}
   .pill.on{background:#0d2a1c;border-color:#1f6b45;color:#5cff9d}
   /* probe console */
@@ -172,8 +272,6 @@
 <nav id="sidebar">
   <div class="brand">DROID QUEEN</div>
   <a href="#" data-screen="chat" class="active">Chat</a>
-  <a href="#" data-screen="widgets">Widgets</a>
-  <a href="#" data-screen="conn">Connections</a>
   <a href="#" data-screen="agents">Agents</a>
   <a href="#" data-screen="evo">Evolution</a>
   <a href="#" data-screen="config">Config</a>
@@ -181,64 +279,207 @@
 <div id="shade"></div>
 <button id="edgetab" aria-label="menu">=</button>
 
-<!-- CHAT -->
+<!-- ═══════════════════════════════════════════════════════════════════════
+     CHAT SCREEN (main, always visible)
+     ═══════════════════════════════════════════════════════════════════════ -->
 <div class="screen show" id="screen-chat">
-  <div id="log">
-    <div class="msg dq" id="greeting">Waking up…</div>
-  </div>
-  <form id="f"><input id="box" placeholder="Message…" autocomplete="off"><button class="goldbtn" id="send">Send</button></form>
-</div>
-
-<!-- WIDGETS -->
-<div class="screen" id="screen-widgets">
-  <div class="pad">
-    <div class="note">Canvas. Agents render interactive widgets here.</div>
-    <div class="bar" style="margin-bottom:12px">
-      <button class="ghostbtn" id="refreshWidgets" title="Reload all widgets">Refresh</button>
-      <button class="ghostbtn" id="clearWidgets" title="Clear all widgets">Clear</button>
-      <span class="note" id="widgetNote"></span>
-    </div>
-    <div id="widgetCanvas" style="display:flex;flex-direction:column;gap:12px"></div>
+  <div id="log"></div>
+  <div id="chatbar">
+    <input id="box" placeholder="Message…" autocomplete="off">
+    <button id="send" class="goldbtn">Send</button>
   </div>
 </div>
 
-<!-- CONNECTIONS -->
-<div class="screen" id="screen-conn">
-  <div class="pad">
-    <div class="note">The vault. Keys live here and nowhere else — agents ask for a capability, never for a key.</div>
+<!-- ═══════════════════════════════════════════════════════════════════════
+     CONNECTIONS DRAWER (modal overlay)
+     ═══════════════════════════════════════════════════════════════════════ -->
+<div id="connDrawer">
+  <div id="connPanel">
+    <div id="connHeader">
+      <h2>Connections</h2>
+      <button class="closeDrawer" aria-label="close">✕</button>
+    </div>
+    <div id="connBody">
+      <div class="note">The vault. Keys live here — agents ask for a capability, never for a key.</div>
+      
+      <div id="missionSteps" style="margin-top:10px">
+        <span class="mstep on" data-step="1">1 · TARGET</span>
+        <span class="mstep" data-step="2">2 · CREDS</span>
+        <span class="mstep" data-step="3">3 · LIVE</span>
+      </div>
 
-    <div id="missionSteps">
-      <span class="mstep on" data-step="1">1 · TARGET</span>
-      <span class="mstep" data-step="2">2 · CREDENTIALS</span>
-      <span class="mstep" data-step="3">3 · HANDSHAKE</span>
+      <select id="cKind" style="display:none">
+        <option value="groq">Groq</option>
+        <option value="gemini">Gemini</option>
+        <option value="openai">OpenAI</option>
+        <option value="hf">Hugging Face</option>
+        <option value="openrouter">OpenRouter</option>
+        <option value="compatible">Compatible</option>
+        <option value="supabase">Supabase</option>
+        <option value="database">Database</option>
+        <option value="email">Email</option>
+        <option value="github">GitHub</option>
+        <option value="rest">REST</option>
+      </select>
+
+      <div class="mpane show" id="mpane-1">
+        <div class="note" style="margin-top:8px">Pick what Droid Queen reaches out to next.</div>
+        <div id="targetGrid"></div>
+      </div>
+
+      <div class="mpane" id="mpane-2">
+        <div id="missionBrief"></div>
+        <div id="cFields"></div>
+        <div class="bar" style="margin-top:10px">
+          <button class="ghostbtn" id="mBack2">← different</button>
+          <button class="goldbtn" id="cAdd">Connect &amp; probe</button>
+        </div>
+      </div>
+
+      <div class="mpane" id="mpane-3">
+        <div id="term"><span class="t-dim">console idle</span></div>
+        <div id="igniteWrap"></div>
+        <div class="bar" style="margin-top:8px">
+          <button class="ghostbtn" id="mBack3">← try another</button>
+          <button class="ghostbtn" id="cProbeNew" style="display:none">Probe again</button>
+        </div>
+      </div>
+
+      <div class="bar" style="margin-top:12px">
+        <button class="ghostbtn" id="scanAll">Scan connections</button>
+      </div>
+
+      <div id="cList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     SIDEBAR SCREENS (Agents, Evolution, Config)
+     ═══════════════════════════════════════════════════════════════════════ -->
+
+<!-- AGENTS -->
+<div class="screen" id="screen-agents">
+  <div class="pad">
+    <div class="note">Eight agents. Bind each to a brain, edit what it's told to be.</div>
+    <div id="agentList"></div>
+    <div class="bar" style="margin-top:12px"><button class="ghostbtn" id="resetAgents">Reset all</button></div>
+  </div>
+</div>
+
+<!-- EVOLUTION -->
+<div class="screen" id="screen-evo">
+  <div class="pad">
+    <label>What you actually want from this swarm</label>
+    <textarea id="goals" placeholder="Plain sentences."></textarea>
+    <div class="bar">
+      <button class="goldbtn" id="saveGoals">Save</button>
+      <button class="ghostbtn" id="studyNow">Study now</button>
+      <span class="note" id="evoNote"></span>
     </div>
 
-    <select id="cKind" style="display:none">
-      <option value="groq">Groq — free, fast, 70B (brain)</option>
-      <option value="gemini">Google Gemini — free tier (brain)</option>
-      <option value="openai">OpenAI (brain)</option>
-      <option value="hf">Hugging Face router (brain)</option>
-      <option value="openrouter">OpenRouter — hundreds of models (brain)</option>
-      <option value="compatible">Any OpenAI-compatible URL (brain)</option>
-      <option value="supabase">Supabase — memory + chat history</option>
-      <option value="database">Database — any REST-fronted DB</option>
-      <option value="email">Email — send via a provider API</option>
-      <option value="github">GitHub — RSI commits its rewrites here</option>
-      <option value="rest">Any REST endpoint — connect to anything</option>
+    <label>Study every</label>
+    <select id="cadence">
+      <option value="0">never</option>
+      <option value="3">3 turns</option>
+      <option value="5" selected>5 turns</option>
+      <option value="10">10 turns</option>
+      <option value="20">20 turns</option>
     </select>
 
-    <div class="mpane show" id="mpane-1">
-      <div class="note">Pick what Droid Queen reaches out to next.</div>
-      <div id="targetGrid"></div>
+    <label>Repository</label>
+    <div class="note" id="repoState">No repo connected.</div>
+    <div class="bar">
+      <button class="ghostbtn" id="pushAll">Push everything</button>
+      <button class="ghostbtn" id="pullAll">Pull from repo</button>
     </div>
+    <div id="term2"><span class="t-dim">repo idle.</span></div>
 
-    <div class="mpane" id="mpane-2">
-      <div id="missionBrief"></div>
-      <div id="cFields"></div>
-      <div class="bar">
-        <button class="ghostbtn" id="mBack2">← different target</button>
-        <button class="goldbtn" id="cAdd">Connect &amp; probe</button>
-      </div>
+    <label>Generations</label>
+    <div class="note">Every rewrite RSI made, newest first. Reversible.</div>
+    <div id="genList"></div>
+  </div>
+</div>
+
+<!-- CONFIG -->
+<div class="screen" id="screen-config">
+  <div class="pad">
+    <label>Pipeline</label>
+    <select id="pipeline">
+      <option value="full">Full</option>
+      <option value="quick">Quick</option>
+    </select>
+
+    <label>Persona</label>
+    <select id="persona">
+      <option value="warm">Warm</option>
+      <option value="terse">Terse</option>
+      <option value="wry">Wry</option>
+      <option value="herald">Herald</option>
+    </select>
+
+    <div class="bar"><button class="goldbtn" id="saveCfg">Save</button><span class="note" id="cfgNote"></span></div>
+
+    <label style="margin-top:16px">Vault backup</label>
+    <div class="note">Export as encrypted JSON to move between devices.</div>
+    <input id="vaultPass" type="password" placeholder="passphrase (optional)">
+    <div class="bar">
+      <button class="goldbtn" id="vaultExport">Export</button>
+      <button class="ghostbtn" id="vaultImportBtn">Import</button>
+      <input id="vaultFile" type="file" accept=".json" style="display:none">
+    </div>
+    <div class="note" id="vaultNote"></div>
+
+    <label style="margin-top:16px">Danger zone</label>
+    <div class="bar">
+      <button class="redbtn" id="wipe">Erase vault</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     OVERLAYS
+     ═══════════════════════════════════════════════════════════════════════ -->
+
+<!-- AUDIO FACE -->
+<div id="audioFace">
+  <button class="exitAudio" id="exitAudioBtn">✕ Text</button>
+  <canvas id="orb"></canvas>
+  <div id="capt">Hold Talk and speak.</div>
+</div>
+
+<!-- VOICE PICKER -->
+<div id="voxSheet">
+  <div id="voxBox">
+    <h2>Voice <button class="ghostbtn" id="voxClose">Close</button></h2>
+    <div id="voxList" style="overflow-y:auto;-webkit-overflow-scrolling:touch"></div>
+    <div class="note" style="padding:8px 0;font-size:11px">
+      Browsers don't expose a gender field, so this list is filtered by known female-voice names.
+      <button class="ghostbtn" id="voxShowAll" style="margin-top:6px;font-size:11px">Show all</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODE BAR -->
+<div id="modebar">
+  <button class="modebtn on" data-mode="text">Text</button>
+  <button class="modebtn" data-mode="audio">Audio</button>
+  <button class="modebtn" data-mode="av">A/V</button>
+  <button id="talkbtn" disabled>Talk</button>
+  <button id="voxbtn">Voice</button>
+</div>
+
+<!-- CONNECTIONS FAB -->
+<button id="connFab" title="Manage connections">⚙</button>
+
+<script>
+"use strict";
+/* ══════════════════════════════════════════════════════════════
+   DROID QUEEN v4 — single-canvas hybrid layout
+   Eight-agent pipeline: GUI → Rationing → Core → [Lawyer|Security] → Tasks → Security → Library
+   ══════════════════════════════════════════════════════════════ */
+
+
     </div>
 
     <div class="mpane" id="mpane-3">
@@ -259,117 +500,7 @@
   </div>
 </div>
 
-<!-- AGENTS -->
-<div class="screen" id="screen-agents">
-  <div class="pad">
-    <div class="note">Eight agents. Bind each to any connected brain, and edit what it is told to be.</div>
-    <div id="agentList"></div>
-    <div class="bar"><button class="ghostbtn" id="resetAgents">Reset all to defaults</button></div>
-  </div>
-</div>
 
-<!-- EVOLUTION -->
-<div class="screen" id="screen-evo">
-  <div class="pad">
-    <label>What you actually want from this swarm</label>
-    <textarea id="goals" placeholder="Plain sentences. RSI reads this every time it studies."></textarea>
-    <div class="bar">
-      <button class="goldbtn" id="saveGoals">Save goals</button>
-      <button class="ghostbtn" id="studyNow">Study now</button>
-      <span class="note" id="evoNote"></span>
-    </div>
-
-    <label>Study on its own, every</label>
-    <select id="cadence">
-      <option value="0">never — only when I press Study</option>
-      <option value="3">3 turns</option>
-      <option value="5" selected>5 turns</option>
-      <option value="10">10 turns</option>
-      <option value="20">20 turns</option>
-    </select>
-
-    <label>Repository</label>
-    <div class="note" id="repoState">No repo connected. Add a GitHub connection and RSI will commit every rewrite as it makes it.</div>
-    <div class="bar">
-      <button class="ghostbtn" id="pushAll">Push everything</button>
-      <button class="ghostbtn" id="pullAll">Pull from repo</button>
-    </div>
-    <div id="term2"><span class="t-dim">repo console idle.</span></div>
-
-    <label>Generations</label>
-    <div class="note">Every rewrite RSI has made, newest first. Nothing asked your permission. Everything is reversible, here or with git revert.</div>
-    <div id="genList"></div>
-  </div>
-</div>
-
-<!-- CONFIG -->
-<div class="screen" id="screen-config">
-  <div class="pad">
-    <label>Pipeline</label>
-    <select id="pipeline">
-      <option value="full">Full — GUI, Rationing, Core, Lawyer + Security veto, Library</option>
-      <option value="quick">Quick — GUI and Core only</option>
-    </select>
-
-    <label>How the GUI agent talks to you</label>
-    <select id="persona">
-      <option value="warm">Warm — plain and friendly</option>
-      <option value="terse">Terse — as few words as possible</option>
-      <option value="wry">Wry — dry humour, still useful</option>
-      <option value="herald">Herald — announces what the swarm is doing</option>
-    </select>
-
-    <div class="bar"><button class="goldbtn" id="saveCfg">Save</button><span class="note" id="cfgNote"></span></div>
-
-    <label style="margin-top:20px">Vault backup</label>
-    <div class="note">Move your connections between devices as a JSON file — Google Drive, OneDrive, iCloud, wherever you keep it. Encrypting it with a passphrase is strongly recommended: an unencrypted export is your raw API keys sitting in a cloud-synced folder.</div>
-    <input id="vaultPass" type="password" placeholder="passphrase (leave blank = unencrypted export)" autocomplete="off">
-    <div class="bar">
-      <button class="goldbtn" id="vaultExport">Export vault.json</button>
-      <button class="ghostbtn" id="vaultImportBtn">Import vault.json</button>
-      <input id="vaultFile" type="file" accept=".json,application/json" style="display:none">
-    </div>
-    <div class="note" id="vaultNote"></div>
-
-    <label style="margin-top:20px">Danger zone</label>
-    <div class="bar">
-      <button class="redbtn" id="wipe">Erase vault and all local memory</button>
-    </div>
-    <div class="note">Keys are stored only in this browser on this device. Nothing is sent anywhere except the provider you connect to.</div>
-  </div>
-</div>
-
-<!-- AUDIO-ONLY FACE — overlays whichever screen is active -->
-<div id="audioFace">
-  <button class="exitAudio" id="exitAudioBtn">✕ Text</button>
-  <canvas id="orb"></canvas>
-  <div id="capt">Hold Talk and speak.</div>
-</div>
-
-<!-- VOICE PICKER -->
-<div id="voxSheet">
-  <div id="voxBox">
-    <h2>Voice <button class="ghostbtn" id="voxClose">Close</button></h2>
-    <div id="voxList" style="overflow-y:auto;-webkit-overflow-scrolling:touch"></div>
-    <div class="note" style="padding:11px 15px">
-      Browsers don't expose a gender field for voices, so this list is filtered by a known
-      female-voice name table. Nothing shown scores male or unknown.
-      <button class="ghostbtn" id="voxShowAll" style="margin-top:8px">Show all voices</button>
-    </div>
-  </div>
-</div>
-
-<!-- MODE BAR — a normal flex row in the body column, same as the header.
-     Cannot be scrolled away and needs no position:fixed. -->
-<div id="modebar">
-  <button class="modebtn on" data-mode="text">Text</button>
-  <button class="modebtn" data-mode="audio">Audio</button>
-  <button class="modebtn" data-mode="av">A/V</button>
-  <button id="talkbtn" disabled>Talk</button>
-  <button id="voxbtn">Voice</button>
-</div>
-
-<script>
 "use strict";
 /* ══════════════════════════════════════════════════════════════
    DROID QUEEN v4 — eight agents, vault-gated connections
@@ -399,8 +530,8 @@ var DEFAULTS = {
     job:"You are the GUI agent, the face of the swarm. Read the user's message and sort it into one of three: smalltalk/status (answer briefly yourself), a request to CONNECT or hook up some service, account, API or tool (return connect, and name the service), or real work (hand to Core). When answering smalltalk or explaining something, you may also render an interactive widget on the canvas — HTML or SVG that shows the concept visually. Return widget markup in a 'widget' field alongside your answer. You never do the work yourself and you never refuse anything — sorting, explaining, and visualizing are your whole job.",
     fmt:'{"kind":"smalltalk|connect|task","reply":"only when smalltalk","service":"only when connect","widget":"optional HTML/SVG markup for the canvas"}'},
   rationing:{title:"Rationing",color:"#1E90FF",kind:"resident",tokens:340,
-    plain:"I decide which brain runs which job, and I learn what each choice cost.",
-    job:"You are the Rationing agent. Given a task and the available brains (with rough size and cost), choose which should run it. Small brains for classification, routing and short factual answers. Large brains for planning, judgement and synthesis. Rate difficulty 1-5.",
+    plain:"I decide which brain runs which job, and I spread the load so nobody's free tier runs out mid-month.",
+    job:"You are the Rationing agent. Given a task and the available brains (with rough size, cost, and how much of this month's free tier each has used), choose which should run it. Prefer a brain that is not near or at its monthly cap over one that is, even if the one at its cap would otherwise be the better fit — an EXHAUSTED brain should only be chosen if nothing else can plausibly do the job. Small brains for classification, routing and short factual answers. Large brains for planning, judgement and synthesis. Rate difficulty 1-5.",
     fmt:'{"connection":"exact connection name","model":"exact model name","difficulty":1,"why":"one short sentence"}'},
   connection:{title:"Connection",color:"#20B2AA",kind:"resident",tokens:260,
     plain:"I am the vault. I connect Droid Queen to anything and anyone — brains, databases, email, repositories, any HTTPS endpoint — and I hold every key myself, handing out narrow permissions instead.",
@@ -491,7 +622,36 @@ var KINDS = {
 };
 
 function connById(id){ var c=conns(); for(var i=0;i<c.length;i++) if(c[i].id===id) return c[i]; return null; }
-function brains(){ return conns().filter(function(c){ return c.enabled && c.caps.indexOf("chat")>=0; }); }
+/* ══════════════ MONTHLY USAGE — spread load so a free tier lasts the month ══════════════
+   Resets itself: keyed by calendar month, so a new month is a clean slate with
+   no button to press. This can't raise anyone's actual quota — it can only stop
+   hammering one exhausted connection while three others sit unused. */
+function thisYM(){ var d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); }
+function usage(){ return getJSON("usage",{}); }
+function recordUsage(connId){
+  var u=usage(), ym=thisYM();
+  if(!u[connId] || u[connId].ym!==ym) u[connId]={ym:ym, count:0};
+  u[connId].count++;
+  putJSON("usage", u);
+}
+function usageFor(connId){
+  var u=usage()[connId], ym=thisYM();
+  return (u && u.ym===ym) ? u.count : 0;
+}
+function usageStatus(c){
+  var used=usageFor(c.id), cap=c.monthlyLimit||0;
+  if(!cap) return {used:used, cap:0, pct:0, exhausted:false};
+  return {used:used, cap:cap, pct:Math.round(100*used/cap), exhausted:used>=cap};
+}
+
+function brains(){
+  return conns().filter(function(c){ return c.enabled && c.caps.indexOf("chat")>=0; })
+    .sort(function(a,b){
+      var sa=usageStatus(a), sb=usageStatus(b);
+      if(sa.exhausted!==sb.exhausted) return sa.exhausted?1:-1;   /* unexhausted first */
+      return usageFor(a.id)-usageFor(b.id);                       /* then least-used first */
+    });
+}
 function memoryConn(){ var c=conns().filter(function(x){return x.enabled&&x.caps.indexOf("history")>=0}); return c[0]||null; }
 
 /* Connection grants a handle. Fast deterministic policy for routine chat;
@@ -645,6 +805,7 @@ async function ask(agentName, text, override){
                "\nREPLY WITH JSON ONLY, shaped like: "+a.fmt+"\n\nINPUT:\n"+text;
   var t0=Date.now();
   var raw = await rawCall(pick.conn, pick.model, prompt, a.tokens);
+  recordUsage(pick.conn.id);
   var out;
   try{ out=JSON.parse(raw); }
   catch(e){ var m=String(raw).match(/\{[\s\S]*\}/);
@@ -1161,7 +1322,11 @@ async function pipeline(message,status){
   if(full && brains().length>1){
     liveEdge("gui","rationing",true);
     mark("rationing","active","Choosing which brain should carry this."); status("Rationing is choosing a brain…");
-    var menu=brains().map(function(c){return c.name+" ("+(c.model||"default")+")"}).join(", ");
+    var menu=brains().map(function(c){
+      var s=usageStatus(c);
+      var tag=!s.cap?"no monthly cap set":s.exhausted?"EXHAUSTED this month":s.used+"/"+s.cap+" used this month";
+      return c.name+" ("+(c.model||"default")+") — "+tag;
+    }).join(", ");
     var rr=await ask("rationing","TASK: "+message+"\nAVAILABLE BRAINS: "+menu);
     used.push("rationing"); liveEdge("gui","rationing",false);
     var chosen=brains().filter(function(c){return c.name===rr.connection})[0];
@@ -1424,7 +1589,6 @@ function setMenu(open){
 }
 shade.onclick=function(){ setMenu(false); };
 if(edgetab) edgetab.onclick=function(){ setMenu(true); };
-document.getElementById("menubtn").onclick=function(){ setMenu(!sidebar.classList.contains("open")); };
 
 /* swipe in from the left edge to open, swipe back to close */
 (function(){
@@ -1459,7 +1623,6 @@ function showScreen(n){
   if(n==="config") loadCfg();
 }
 var links=document.querySelectorAll("#sidebar a");
-for(var i=0;i<links.length;i++) links[i].onclick=function(e){e.preventDefault();showScreen(this.dataset.screen)};
 
 /* connections screen — guided mission: TARGET → CREDENTIALS → HANDSHAKE.
    Every step drives the same hidden #cKind + #cFields the old flat form
@@ -1528,7 +1691,9 @@ function renderKindFields(){
     '<label>Name it</label><input id="cName" placeholder="'+K.label+'" value="'+K.label+'">'+
     (needsBase?'<label>Base URL</label><input id="cBase" placeholder="https://…">':'')+
     (K.needsKey?'<label>Key</label><input id="cKey" placeholder="paste key" autocapitalize="off" autocorrect="off" spellcheck="false"><div class="keyhint t-dim" id="cKeyHint"></div>':'')+
-    (K.caps.indexOf("chat")>=0?'<label>Default model</label><input id="cModel" value="'+(K.defModel||"")+'">':'')+
+    (K.caps.indexOf("chat")>=0?'<label>Default model</label><input id="cModel" value="'+(K.defModel||"")+'">'+
+      '<label>Monthly call budget <span style="color:var(--dim)">(optional — leave blank if unsure)</span></label>'+
+      '<input id="cLimit" type="number" min="0" placeholder="e.g. 1000, from the provider\'s free-tier page">':'')+
     (k==="github"?'<label>Repository</label><input id="cRepo" placeholder="your-username/droid-queen" autocapitalize="off" spellcheck="false"><label>Branch</label><input id="cBranch" value="main" autocapitalize="off" spellcheck="false">':'')+
     '<div class="note" style="margin-top:8px">'+K.hint+'</div>';
 }
@@ -1562,7 +1727,7 @@ function igniteAgentList(K){
 document.getElementById("cAdd").onclick=function(){
   var k=document.getElementById("cKind").value, K=KINDS[k];
   var name=(document.getElementById("cName")||{}).value||K.label;
-  var baseEl=document.getElementById("cBase"), keyEl=document.getElementById("cKey"), mEl=document.getElementById("cModel");
+  var baseEl=document.getElementById("cBase"), keyEl=document.getElementById("cKey"), mEl=document.getElementById("cModel"), limEl=document.getElementById("cLimit");
   var base=(baseEl?baseEl.value.trim():"")||K.base;
   var note=document.getElementById("cNote");
   if(!base){ note.innerHTML='<span class="bad">needs a base URL</span>'; return; }
@@ -1571,6 +1736,7 @@ document.getElementById("cAdd").onclick=function(){
   var repoEl=document.getElementById("cRepo"), brEl=document.getElementById("cBranch");
   var fresh={ id:"c"+Date.now().toString(36), name:name.trim()||K.label, kind:k, base:base.replace(/\/+$/,""),
               key:keyEl?cleanKey(keyEl.value):"", model:mEl?mEl.value.trim():"", caps:K.caps.slice(), enabled:true,
+              monthlyLimit:limEl?(parseInt(limEl.value,10)||0):0,
               repo:repoEl?repoEl.value.trim().replace(/^https?:\/\/github\.com\//,"").replace(/\.git$/,""):"",
               branch:brEl?(brEl.value.trim()||"main"):"main" };
   if(k==="github" && !fresh.repo){ note.innerHTML='<span class="bad">needs a repository, like you/droid-queen</span>'; return; }
@@ -1592,7 +1758,6 @@ document.getElementById("cAdd").onclick=function(){
           '<p>'+(unlocked.length?esc(unlocked.join(", "))+" can use it right now.":unlockText(K))+'</p>'+
           '<div class="bar"><button class="goldbtn" id="ignChat">Talk to it now</button>'+
           '<button class="ghostbtn" id="ignAnother">Connect another</button></div></div>';
-        document.getElementById("ignChat").onclick=function(){ showScreen("chat"); box.focus(); };
         document.getElementById("ignAnother").onclick=function(){ setMissionStep(1); };
       }else{
         document.getElementById("igniteWrap").innerHTML =
@@ -1665,9 +1830,16 @@ function renderConns(){
     byCat[cat].forEach(function(idx){
       var x=c[idx], K=KINDS[x.kind]||{label:x.kind};
       var card=document.createElement("div"); card.className="card";
+      var usageLine="";
+      if(x.caps.indexOf("chat")>=0){
+        var s=usageStatus(x);
+        usageLine = '<div class="sub">'+(s.cap
+          ? (s.used+"/"+s.cap+" calls this month"+(s.exhausted?' — <span class="warn">at cap</span>':''))
+          : (s.used+" calls this month — no cap set"))+'</div>';
+      }
       card.innerHTML='<div class="top"><span class="dot" style="background:'+(x.enabled?"#20B2AA":"#777")+'"></span>'+
         '<b>'+x.name+'</b><span class="role">'+K.label+'</span></div>'+
-        '<div class="sub">'+x.base+'</div>'+
+        '<div class="sub">'+x.base+'</div>'+usageLine+
         x.caps.map(function(p){return '<span class="pill">'+p+'</span>'}).join("")+
         (x.model?'<span class="pill">'+x.model+'</span>':'');
       var bar=document.createElement("div"); bar.className="bar";
@@ -2114,6 +2286,49 @@ document.getElementById("clearWidgets").onclick=function(){
   document.getElementById("widgetNote").innerHTML='<span class="ok">cleared</span>';
   setTimeout(function(){document.getElementById("widgetNote").textContent="";},1500);
 };
+
+/* ════════════════ FAB + CONNECTIONS DRAWER ════════════════ */
+document.getElementById("connFab").onclick=function(){
+  document.getElementById("connDrawer").classList.add("show");
+};
+document.querySelector("#connHeader .closeDrawer").onclick=function(){
+  document.getElementById("connDrawer").classList.remove("show");
+};
+document.getElementById("connDrawer").onclick=function(e){
+  if(e.target===this) this.classList.remove("show");
+};
+
+/* ════════════════ SIDEBAR NAV ════════════════ */
+var links=document.querySelectorAll("#sidebar a"), shade=document.getElementById("shade"),
+    sidebar=document.getElementById("sidebar"), edgetab=document.getElementById("edgetab"),
+    menubtn=document.getElementById("menubtn");
+function toggleSidebar(){sidebar.classList.toggle("open");}
+menubtn.onclick=toggleSidebar;
+edgetab.onclick=toggleSidebar;
+shade.onclick=function(){sidebar.classList.remove("open")};
+for(var i=0;i<links.length;i++){
+  links[i].onclick=function(e){e.preventDefault();
+    showScreen(this.dataset.screen);
+    sidebar.classList.remove("open");
+  };
+}
+
+/* ════════════════ SCREEN ROUTING ════════════════ */
+function showScreen(n){
+  var sc=document.querySelectorAll(".screen");
+  for(var i=0;i<sc.length;i++) sc[i].classList.remove("show");
+  document.getElementById("screen-"+n).classList.add("show");
+  document.getElementById("title").textContent = n==="chat"?"Chat":n==="agents"?"Agents":n==="evo"?"Evolution":"Config";
+  if(n==="agents") renderAgents();
+  if(n==="evo") loadEvo();
+  for(var j=0;j<links.length;j++) links[j].classList.toggle("active",links[j].dataset.screen===n);
+}
+
+/* ════════════════ CONNECTIONS DRAWER (replaces showScreen("conn")) ════════════════ */
+function openConnDrawer(){
+  document.getElementById("connDrawer").classList.add("show");
+  renderKindFields(); setMissionStep(1);
+}
 
 /* boot */
 /* the mode bar's real height, not a guess — device chrome and safe-area

@@ -342,6 +342,7 @@
         <div class="bar" style="margin-top:8px">
           <button class="ghostbtn" id="mBack3">← try another</button>
           <button class="ghostbtn" id="cProbeNew" style="display:none">Probe again</button>
+          <span class="note" id="cNote"></span>
         </div>
       </div>
 
@@ -477,34 +478,6 @@
 /* ══════════════════════════════════════════════════════════════
    DROID QUEEN v4 — single-canvas hybrid layout
    Eight-agent pipeline: GUI → Rationing → Core → [Lawyer|Security] → Tasks → Security → Library
-   ══════════════════════════════════════════════════════════════ */
-
-
-    </div>
-
-    <div class="mpane" id="mpane-3">
-      <div id="term"><span class="t-dim">console idle. probe a connection and I will show you every step.</span></div>
-      <div id="igniteWrap"></div>
-      <div class="bar" style="margin-top:8px">
-        <button class="ghostbtn" id="mBack3">← try another target</button>
-        <button class="ghostbtn" id="cProbeNew" style="display:none">Probe again</button>
-        <span class="note" id="cNote"></span>
-      </div>
-    </div>
-
-    <div class="bar" style="margin-top:10px">
-      <button class="ghostbtn" id="scanAll">Scan every connection</button>
-    </div>
-
-    <div id="cList"></div>
-  </div>
-</div>
-
-
-"use strict";
-/* ══════════════════════════════════════════════════════════════
-   DROID QUEEN v4 — eight agents, vault-gated connections
-   GUI → Rationing → Core → [Lawyer|Security] → Tasks → Security → Library
    Connection is the only thing that touches keys.
    ══════════════════════════════════════════════════════════════ */
 
@@ -2060,8 +2033,7 @@ function addMsg(cls,text){
   var d=document.createElement("div"); d.className="msg "+cls; d.textContent=text;
   log.appendChild(d); log.scrollTop=log.scrollHeight; return d;
 }
-document.getElementById("f").onsubmit=async function(e){
-  e.preventDefault();
+async function submitChat(){
   var text=box.value.trim(); if(!text) return;
   addMsg("you",text); remember("user",text,"");
   box.value=""; send.disabled=true;
@@ -2087,7 +2059,9 @@ document.getElementById("f").onsubmit=async function(e){
     }
   }catch(err){ busy.textContent=err.message; busy.className="msg dq"; }
   send.disabled=false; state.textContent="idle"; box.focus();
-};
+}
+send.onclick=submitChat;
+box.onkeydown=function(e){ if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); submitChat(); } };
 
 /* ══════════════ VOICE — female-only TTS + push-to-talk ASR ══════════════
    Browsers expose no gender field for speechSynthesis voices, so
@@ -2159,7 +2133,7 @@ var ASR = {
       if(fin){
         caption(fin,true);
         box.value=fin.trim();
-        document.getElementById("f").dispatchEvent(new Event("submit",{cancelable:true}));
+        submitChat();
       }
     };
     // Chrome drops recognition after a silence window — auto-restart or
@@ -2279,13 +2253,9 @@ function renderWidgets(){
     }).join("")
     : '<div style="text-align:center;color:var(--dim);padding:2rem 1rem">No widgets yet. Agents can render interactive content here.</div>';
 }
-document.getElementById("refreshWidgets").onclick=function(){ renderWidgets(); };
-document.getElementById("clearWidgets").onclick=function(){
-  if(!confirm("Clear all widgets?")) return;
-  saveWidgets([]); renderWidgets();
-  document.getElementById("widgetNote").innerHTML='<span class="ok">cleared</span>';
-  setTimeout(function(){document.getElementById("widgetNote").textContent="";},1500);
-};
+/* Widgets screen isn't part of this layout (Option 3 kept scope to Chat + Connections),
+   but addWidget()/renderWidgets() stay live since GUI agent output still calls them —
+   renderWidgets() no-ops safely if #widgetCanvas isn't in the DOM. */
 
 /* ════════════════ FAB + CONNECTIONS DRAWER ════════════════ */
 document.getElementById("connFab").onclick=function(){
@@ -2342,12 +2312,11 @@ syncModebarH();
 TTS.init(); ASR.init(); setMode(MODE);
 renderKindFields(); wireKeyHint();
 (function(){
-  var el=document.getElementById("greeting"); if(!el) return;
   var b=brains(), r=repoConn();
-  el.textContent = !b.length
-    ? "Ten agents awake, nothing connected yet. Open Connections and hook me up to a brain — every connection you add becomes a new star."
-    : "Ten agents awake, thinking with "+b.map(function(c){return c.name}).join(" and ")+
-      (r? ", committing to "+r.repo : "")+". Ask me for something.";
+  addMsg("dq", !b.length
+    ? "Eight agents awake, nothing connected yet. Tap the ⚙ button and hook me up to a brain — every connection you add becomes a new star."
+    : "Eight agents awake, thinking with "+b.map(function(c){return c.name}).join(" and ")+
+      (r? ", committing to "+r.repo : "")+". Ask me for something.");
 })();
 </script>
 </body>
